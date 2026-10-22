@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic>=2.9
+pydantic-settings
+psycopg[binary,pool]
+pgvector
+boto3
+PyJWT
+cryptography
+httpx
+python-dotenv
