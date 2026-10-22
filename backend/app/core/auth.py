@@ -26,6 +26,10 @@ class AuthError(Exception):
     """Raised when a bearer token is missing, malformed, expired or untrusted."""
 
 
+class JwksUnavailable(Exception):
+    """Raised when the signing keys cannot be fetched (not the caller's fault)."""
+
+
 def _origin(base_url: str) -> str:
     parsed = urlparse(base_url)
     return f"{parsed.scheme}://{parsed.netloc}"
@@ -36,23 +40,38 @@ def _ed25519_key(jwk: dict) -> Ed25519PublicKey:
 
 
 class JwksCache:
-    """Caches the Neon Auth signing keys, refreshing on expiry or an unknown key id."""
+    """Caches the Neon Auth signing keys.
 
-    def __init__(self, fetch: Callable[[], dict], ttl_seconds: int = 3600):
+    Refreshes when the cache expires, or when a token names an unknown key id (a key
+    rotation) — but at most once per min_refresh_seconds, so junk key ids cannot make
+    the server hit the auth service on every request.
+    """
+
+    def __init__(
+        self,
+        fetch: Callable[[], dict],
+        ttl_seconds: int = 3600,
+        min_refresh_seconds: int = 30,
+    ):
         self._fetch = fetch
         self._ttl = ttl_seconds
+        self._min_refresh = min_refresh_seconds
         self._keys: dict[str, Ed25519PublicKey] = {}
-        self._loaded_at = 0.0
+        self._loaded_at: float | None = None
         self._lock = threading.Lock()
 
     def _refresh(self) -> None:
-        jwks = self._fetch()
-        self._keys = {k["kid"]: _ed25519_key(k) for k in jwks.get("keys", [])}
+        try:
+            jwks = self._fetch()
+            self._keys = {k["kid"]: _ed25519_key(k) for k in jwks.get("keys", [])}
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            raise JwksUnavailable(str(exc)) from exc
         self._loaded_at = time.monotonic()
 
     def key_for(self, kid: str) -> Ed25519PublicKey:
         with self._lock:
-            if kid not in self._keys or time.monotonic() - self._loaded_at > self._ttl:
+            age = None if self._loaded_at is None else time.monotonic() - self._loaded_at
+            if age is None or age > self._ttl or (kid not in self._keys and age > self._min_refresh):
                 self._refresh()
             if kid not in self._keys:
                 raise AuthError("unknown signing key")
@@ -108,5 +127,7 @@ def current_user(
             credentials.credentials, settings.neon_auth_base_url, _default_cache(settings)
         )
         return AuthUser(id=UUID(claims["sub"]), email=claims.get("email"))
-    except (AuthError, KeyError, ValueError, httpx.HTTPError) as exc:
+    except JwksUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Auth service unavailable") from exc
+    except (AuthError, KeyError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired token") from exc

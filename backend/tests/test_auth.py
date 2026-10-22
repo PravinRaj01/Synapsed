@@ -2,6 +2,7 @@ import base64
 import time
 from uuid import uuid4
 
+import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -97,10 +98,44 @@ def test_cache_refetches_when_key_is_rotated():
     old_private, old_jwk = make_key("old")
     new_private, new_jwk = make_key("new")
     served = [{"keys": [old_jwk]}]
-    cache = JwksCache(lambda: served[0])
+    cache = JwksCache(lambda: served[0], min_refresh_seconds=0)
     verify_token(sign(old_private, kid="old"), BASE_URL, cache)
     served[0] = {"keys": [old_jwk, new_jwk]}  # Neon rotated keys
     verify_token(sign(new_private, kid="new"), BASE_URL, cache)
+
+
+def test_unknown_key_ids_do_not_hammer_the_auth_service(key):
+    private, jwk = key
+    fetches = []
+
+    def fetch():
+        fetches.append(1)
+        return {"keys": [jwk]}
+
+    cache = JwksCache(fetch)  # default 30 s throttle
+    verify_token(sign(private), BASE_URL, cache)
+    for i in range(20):
+        with pytest.raises(AuthError):
+            verify_token(sign(private, kid=f"junk-{i}"), BASE_URL, cache)
+    assert len(fetches) == 1
+
+
+def test_jwks_outage_is_not_reported_as_a_bad_token(key, monkeypatch):
+    private, _ = key
+
+    def fetch():
+        raise httpx.ConnectError("auth service down")
+
+    monkeypatch.setattr(auth, "_default_cache", lambda settings: JwksCache(fetch))
+    app = FastAPI()
+    app.dependency_overrides[get_settings] = lambda: Settings(neon_auth_base_url=BASE_URL)
+
+    @app.get("/me")
+    def me(user: AuthUser = Depends(current_user)):
+        return {"id": str(user.id)}
+
+    response = TestClient(app).get("/me", headers={"Authorization": f"Bearer {sign(private)}"})
+    assert response.status_code == 503
 
 
 def test_current_user_dependency(key, cache, monkeypatch):
