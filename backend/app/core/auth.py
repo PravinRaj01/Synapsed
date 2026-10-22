@@ -71,7 +71,7 @@ class JwksCache:
     def key_for(self, kid: str) -> Ed25519PublicKey:
         with self._lock:
             age = None if self._loaded_at is None else time.monotonic() - self._loaded_at
-            if age is None or age > self._ttl or (kid not in self._keys and age > self._min_refresh):
+            if age is None or age > self._ttl or (kid not in self._keys and age >= self._min_refresh):
                 self._refresh()
             if kid not in self._keys:
                 raise AuthError("unknown signing key")
