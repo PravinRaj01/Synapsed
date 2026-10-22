@@ -1,0 +1,25 @@
+# Planning and AI docs: never public
+*[Bb]lueprint*.md
+plans/
+archive/
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+venv/
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
