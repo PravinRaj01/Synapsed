@@ -68,7 +68,7 @@ def parse_upload(
     if kind == "pdf":
         return [ParsedItem(filename, parsers.parse_pdf(data))]
     if kind == "image":
-        return [ParsedItem(filename, parsers.parse_image(data))]
+        return [ParsedItem(filename, parsers.parse_image(data, filename))]
     if kind in ("audio", "video"):
         from app.ingestion.transcribe import transcribe
 
