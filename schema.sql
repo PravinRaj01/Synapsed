@@ -66,6 +66,7 @@ create table resources (
     pii_redacted boolean not null default false,
     pii_note text,                            -- set when names may remain (e.g. non-English text)
     status text not null default 'staged' check (status in ('staged','approved','rejected')),
+    analyzed_at timestamptz,                  -- set once the analysis graph has extracted its pain points
     created_at timestamptz default timezone('utc', now()) not null,
     unique (campaign_id, content_hash)
 );
