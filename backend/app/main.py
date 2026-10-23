@@ -1,4 +1,5 @@
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -6,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.ingestion import router as ingestion_router
-from app.core import database
+from app.core import database, name_models
 from app.core.config import get_settings
 
 logger = logging.getLogger("synapsed")
@@ -14,6 +15,8 @@ logger = logging.getLogger("synapsed")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if get_settings().pii_warmup:  # load the name models in the background
+        threading.Thread(target=name_models.warm_up, daemon=True).start()
     if get_settings().database_url:
         database.init_pool()
     else:

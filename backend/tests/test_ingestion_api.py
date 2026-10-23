@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import ingestion as api
-from app.core import database
+from app.core import database, pii_shield
 from app.core.auth import AuthUser, current_user
 from app.core.config import Settings, get_settings
 from app.ingestion import web
@@ -200,7 +200,8 @@ MALAY_NOTE = (
 )
 
 
-def test_non_english_text_keeps_its_words_and_returns_a_review_notice(client, campaign, who):
+def test_non_english_text_keeps_its_words_and_returns_a_review_notice(client, campaign, who, monkeypatch):
+    monkeypatch.setattr(pii_shield.name_models, "detector_for", lambda _language: None)  # no model
     r = post_file(client, campaign.id, "temuduga.txt", MALAY_NOTE.encode())
     assert r.status_code == 200, r.text
     res = r.json()["resources"][0]
@@ -215,3 +216,16 @@ def test_non_english_text_keeps_its_words_and_returns_a_review_notice(client, ca
 def test_english_text_has_no_review_notice(client, campaign):
     res = post_file(client, campaign.id, "en.txt", NOTE.encode()).json()["resources"][0]
     assert res["pii_notice"] is None
+
+
+def test_malay_names_are_scrubbed_when_a_name_model_is_available(client, campaign, who, monkeypatch):
+    def spans(text):
+        start = text.index("ahmad@")  # stand-in span; only the routing and storage are under test
+        return [(start, start + 5)]
+
+    monkeypatch.setattr(pii_shield.name_models, "detector_for", lambda _language: ("Malay", spans))
+    res = post_file(client, campaign.id, "temuduga.txt", MALAY_NOTE.encode()).json()["resources"][0]
+    assert "Malay name model" in res["pii_notice"] and res["redactions"]["PERSON"] == 1
+    row = fetch(who, "select content, pii_note from resources where id = %s", res["id"])[0]
+    assert "<PERSON>" in row["content"] and "Pertama sekali" in row["content"]
+    assert row["pii_note"] == res["pii_notice"]

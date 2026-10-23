@@ -5,11 +5,11 @@ names, emails and phone numbers; a regex pass then catches anything it missed, a
 is also the fallback when the name detector cannot be trusted. Redactions become
 tokens such as <PERSON>, so stored text and chunk offsets refer to the scrubbed text.
 
-The name detector is an English-only model. On other languages it guesses, and it
-turns ordinary words into <PERSON> (a Malay interview lost 1 word in 6), which
-ruins the text for analysis. So names are only detected in English text. Anywhere
-else only emails and phone numbers are scrubbed, and the result carries a notice so
-the user can review the text before approving it.
+English text uses spaCy through Presidio. That model is English-only: on other languages it guesses
+and turns ordinary words into <PERSON> (a Malay interview lost 1 word in 6). Malay and Tamil text
+therefore use local models (app/core/name_models.py), and any other language gets regex scrubbing
+of emails and phone numbers only. Every non-English result carries a notice so the user can
+review the text before approving it.
 """
 
 import logging
@@ -18,6 +18,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from app.core import name_models
 from app.core.language import detect_language
 
 logger = logging.getLogger("synapsed.pii")
@@ -125,14 +126,46 @@ def _regex_only(text: str, notice: str) -> ScrubResult:
     return ScrubResult(_regex_scrub(text, counts), dict(counts), engine="regex", notice=notice)
 
 
+def _scrub_with_name_model(text: str, label: str, person_spans) -> ScrubResult:
+    """Malay/Tamil path: a local model finds the names, regex handles emails and phones."""
+    spans = person_spans(text)
+    if names_look_unreliable(len(spans), len(text.split())):
+        logger.warning("%s name model tagged %s spans; discarding it", label, len(spans))
+        return _regex_only(
+            text,
+            "Names were not scrubbed: name detection looked unreliable on this text and was "
+            "skipped. Emails and phone numbers were scrubbed. Review before approving.",
+        )
+    scrubbed, found = name_models.redact_spans(text, spans)
+    counts: Counter = Counter({"PERSON": found} if found else {})
+    scrubbed = _regex_scrub(scrubbed, counts)
+    return ScrubResult(
+        text=scrubbed, redactions=dict(counts), engine=f"{label.lower()}-model",
+        notice=f"Names were scrubbed with a {label} name model that can miss some names (and may "
+        "flag food or place words). Emails and phone numbers were scrubbed. Review before approving.",
+    )
+
+
 def scrub_pii(text: str) -> ScrubResult:
     """Redact names, emails and phone numbers. Never raises: falls back to regex only."""
     language = detect_language(text)
     if language is not None and language not in NER_LANGUAGES:
+        detector = name_models.detector_for(language)
+        if detector is not None:
+            try:
+                return _scrub_with_name_model(text, *detector)
+            except Exception:  # model download or inference failed
+                logger.warning("%s name model failed; using regex-only scrubbing", detector[0], exc_info=True)
+                return _regex_only(
+                    text,
+                    "Names were not scrubbed: the name model was unavailable. Emails and phone "
+                    "numbers were scrubbed. Review before approving.",
+                )
         return _regex_only(
             text,
             f"Names were not scrubbed: the text looks like '{language}' and name detection only "
-            "supports English. Emails and phone numbers were scrubbed. Review before approving.",
+            "supports English, Malay and Tamil. Emails and phone numbers were scrubbed. "
+            "Review before approving.",
         )
 
     counts: Counter = Counter()
