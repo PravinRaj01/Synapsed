@@ -14,6 +14,7 @@ from ai_pipeline.telemetry import record_completion
 from app.core.auth import AuthUser, current_user
 from app.core.config import get_settings
 from app.core.database import user_tx
+from app.core.rate_limit import limited
 from app.integrations import jira
 
 logger = logging.getLogger("synapsed.prds")
@@ -36,7 +37,7 @@ def _filename(title: str) -> str:
 
 
 @router.post("/roadmap/{item_id}/prd", status_code=201)
-def generate_prd(item_id: UUID, user: AuthUser = Depends(current_user)):
+def generate_prd(item_id: UUID, user: AuthUser = Depends(limited("prd"))):
     """Write a PRD for the roadmap item from its theme's evidence. Each call stores a new version."""
     with user_tx(user.id) as conn:
         item = conn.execute(ITEM_SQL, (item_id,)).fetchone()

@@ -323,6 +323,25 @@ create trigger audit_resources  after insert or update or delete on resources
 create trigger audit_roadmap    after insert or update or delete on roadmap_items
     for each row execute function log_audit_event();
 
+-- 15. Rate limits: fixed-window counters per user, shared by every server instance
+create table if not exists rate_limits (
+    user_id uuid not null,
+    bucket text not null,                      -- 'chat', 'ingest', ...
+    window_kind text not null check (window_kind in ('minute', 'day')),
+    window_start timestamp not null,           -- UTC start of the window
+    hits int not null default 0,
+    primary key (user_id, bucket, window_kind, window_start)
+);
+create index if not exists rate_limits_window_idx on rate_limits (window_start);
+alter table rate_limits enable row level security;
+do $$ begin
+    if not exists (select 1 from pg_policies where tablename = 'rate_limits' and policyname = 'rate_limits_own') then
+        create policy rate_limits_own on rate_limits for all
+            using (user_id = current_app_user()) with check (user_id = current_app_user());
+    end if;
+end $$;
+grant select, insert, update, delete on rate_limits to synapsed_app;
+
 -- ---------- Application role ----------
 -- Create synapsed_app in the Neon console (Roles) or with
 --   create role synapsed_app with login password '<strong password>';

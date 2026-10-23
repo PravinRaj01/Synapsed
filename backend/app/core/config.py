@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     cluster_new_similarity: float = 0.81
     cluster_agent_max_steps: int = 4
 
+    # Per-user rate limits (see app/core/rate_limit.py). RATE_LIMITS overrides single buckets, e.g. {"chat": [30, 600]}
+    # as [per minute, per day].
+    rate_limit_enabled: bool = True
+    rate_limits: str = ""
+
     # An analysis run lives inside one request (300 s on Vercel), so it takes a batch of resources.
     analyze_batch_size: int = 10
     analyze_stale_minutes: int = 6  # a run with no end event after this long is treated as dead

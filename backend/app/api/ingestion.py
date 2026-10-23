@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from ai_pipeline.embedder import embed_texts
 from app.api.common import require_campaign as _require_campaign
 from app.core import storage
+from app.core.rate_limit import limited
 from app.core.auth import AuthUser, current_user
 from app.core.config import get_settings
 from app.core.database import user_tx
@@ -155,7 +156,7 @@ def ingest(
     source_type: str | None = Form(None),
     text_column: str | None = Form(None),
     segment_column: str | None = Form(None),
-    user: AuthUser = Depends(current_user),
+    user: AuthUser = Depends(limited("ingest")),
 ) -> IngestResponse:
     """Parse, scrub and stage an uploaded file. Nothing is embedded until it is approved.
 
@@ -193,7 +194,7 @@ def create_upload(req: UploadRequest, user: AuthUser = Depends(current_user)) ->
 
 
 @router.post("/ingest/stored", response_model=IngestResponse)
-def ingest_stored(req: StoredIngestRequest, user: AuthUser = Depends(current_user)) -> IngestResponse:
+def ingest_stored(req: StoredIngestRequest, user: AuthUser = Depends(limited("ingest"))) -> IngestResponse:
     """Stage a file the browser already uploaded to the key from /uploads."""
     max_bytes = get_settings().max_upload_mb * 1024 * 1024
     _require_campaign(user.id, req.campaign_id)
@@ -225,7 +226,7 @@ def list_resources(campaign_id: UUID, status: str | None = None, user: AuthUser 
 
 
 @router.post("/resources/{resource_id}/approve")
-def approve_resource(resource_id: UUID, user: AuthUser = Depends(current_user)):
+def approve_resource(resource_id: UUID, user: AuthUser = Depends(limited("approve"))):
     """Chunk and embed a staged resource, then mark it approved so agents and chat can use it."""
     with user_tx(user.id) as conn:
         row = conn.execute("select status, content from resources where id = %s", (resource_id,)).fetchone()
@@ -269,7 +270,7 @@ def reject_resource(resource_id: UUID, user: AuthUser = Depends(current_user)):
 
 
 @router.post("/research", response_model=list[ResearchResult])
-def research(req: ResearchRequest, user: AuthUser = Depends(current_user)) -> list[ResearchResult]:
+def research(req: ResearchRequest, user: AuthUser = Depends(limited("research"))) -> list[ResearchResult]:
     """Search the web and stage readable results. The PM approves what is worth keeping."""
     _require_campaign(user.id, req.campaign_id)
     try:
