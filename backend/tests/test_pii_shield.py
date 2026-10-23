@@ -4,6 +4,12 @@ from app.core import pii_shield
 from app.core.pii_shield import scrub_pii
 
 
+@pytest.fixture(autouse=True)
+def no_name_models(monkeypatch):
+    """By default no Malay/Tamil model is used, so these tests never download one."""
+    monkeypatch.setattr(pii_shield.name_models, "detector_for", lambda _language: None)
+
+
 def test_redacts_name_email_and_phone():
     text = "Hi, I'm Sarah Connor. Reach me at sarah.connor@example.com or +60 12-345 6789."
     result = scrub_pii(text)
@@ -99,3 +105,58 @@ def test_a_name_model_that_is_guessing_is_discarded(monkeypatch):
     assert "<PERSON>" not in result.text and "export" in result.text
     assert "unreliable" in result.notice and result.engine == "regex"
     assert result.redactions == {"EMAIL_ADDRESS": 1}
+
+
+def fake_detector(monkeypatch, label, spans_for, language_filter=None):
+    monkeypatch.setattr(
+        pii_shield.name_models, "detector_for",
+        lambda language: (label, spans_for) if language_filter is None or language in language_filter else None,
+    )
+
+
+def test_malay_uses_the_name_model_when_one_is_available(monkeypatch):
+    def spans(text):
+        start = text.index("Ahmad")
+        return [(start, start + len("Ahmad"))]
+
+    fake_detector(monkeypatch, "Malay", spans)
+    result = scrub_pii(MALAY)
+    assert "Ahmad" not in result.text and "saya <PERSON> dari" in result.text
+    assert "Pertama sekali" in result.text and "operasi" in result.text  # nothing else is touched
+    assert result.engine == "malay-model" and result.redactions["PERSON"] == 1
+    assert "ahmad@pusat.com.my" not in result.text and "345 6789" not in result.text  # regex still runs
+    assert "Malay name model that can miss some names" in result.notice
+
+
+def test_tamil_uses_its_own_label(monkeypatch):
+    def spans(text):
+        start = text.index("tamil@")  # any span: only the routing is under test
+        return [(start, start + 3)]
+
+    fake_detector(monkeypatch, "Tamil", spans)
+    assert scrub_pii(TAMIL).engine == "tamil-model"
+
+
+def test_a_failing_name_model_falls_back_to_regex(monkeypatch):
+    def broken(_text):
+        raise OSError("could not download model")
+
+    fake_detector(monkeypatch, "Malay", broken)
+    result = scrub_pii(MALAY)
+    assert result.engine == "regex" and "name model was unavailable" in result.notice
+    assert "ahmad@pusat.com.my" not in result.text and "Pertama sekali" in result.text
+
+
+def test_a_name_model_that_flags_too_much_is_discarded(monkeypatch):
+    everything = lambda text: [(0, len(text))]  # absurd, but proves the cap applies to models too
+    long_malay = (MALAY + " ") * 3
+    fake_detector(monkeypatch, "Malay", lambda text: [(i, i + 1) for i in range(0, 60, 2)])
+    result = scrub_pii(long_malay)
+    assert result.engine == "regex" and "unreliable" in result.notice and "<PERSON>" not in result.text
+
+
+def test_languages_without_a_model_still_get_the_review_notice(monkeypatch):
+    fake_detector(monkeypatch, "Malay", lambda text: [], language_filter={"ms", "id"})
+    thai = "ฉันต้องการข้อมูลเพิ่มเติมเกี่ยวกับการจัดการขยะในร้านอาหารของเรา กรุณาติดต่อ test@example.com"
+    result = scrub_pii(thai)
+    assert result.engine == "regex" and "English, Malay and Tamil" in result.notice

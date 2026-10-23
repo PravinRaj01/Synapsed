@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     gemini_embed_model: str = "gemini-embedding-001"
 
+    # Local name-detection models for non-English text (blank disables a model).
+    pii_malay_model: str = "mesolitica/ner-t5-small-standard-bahasa-cased"
+    pii_tamil_model: str = "Lokeshwaran/xlm-roberta-base-fintuned-panx-ta-hi"
+    pii_warmup: bool = False  # load the models at startup instead of on first use
+
     # Ingestion limits and tools.
     max_upload_mb: int = 50
     tesseract_cmd: str = ""  # path to tesseract(.exe) when it is not on PATH
