@@ -191,3 +191,27 @@ def test_research_requires_own_campaign(client, campaign, who):
     who.id = uuid4()
     r = client.post("/api/v1/research", json={"campaign_id": str(campaign.id), "query": "anything at all"})
     assert r.status_code == 404
+
+
+MALAY_NOTE = (
+    "Pertama sekali, kami menguruskan lima belas kedai di pusat beli-belah ini. Setiap hari kami buang "
+    "lebih kurang dua puluh kilogram sisa makanan. Okay, jadi kami ada dua tong, satu hijau untuk sisa "
+    "makanan dan satu lagi untuk kertas dan plastik. Hubungi ahmad@pusat.com.my untuk soalan lanjut."
+)
+
+
+def test_non_english_text_keeps_its_words_and_returns_a_review_notice(client, campaign, who):
+    r = post_file(client, campaign.id, "temuduga.txt", MALAY_NOTE.encode())
+    assert r.status_code == 200, r.text
+    res = r.json()["resources"][0]
+    assert "Names were not scrubbed" in res["pii_notice"] and res["redactions"] == {"EMAIL_ADDRESS": 1}
+    row = fetch(who, "select content, pii_note from resources where id = %s", res["id"])[0]
+    assert "Pertama sekali" in row["content"] and "Okay" in row["content"] and "<PERSON>" not in row["content"]
+    assert "ahmad@pusat.com.my" not in row["content"] and row["pii_note"] == res["pii_notice"]
+    listed = client.get("/api/v1/resources", params={"campaign_id": str(campaign.id)}).json()
+    assert listed[0]["pii_note"] == res["pii_notice"]
+
+
+def test_english_text_has_no_review_notice(client, campaign):
+    res = post_file(client, campaign.id, "en.txt", NOTE.encode()).json()["resources"][0]
+    assert res["pii_notice"] is None

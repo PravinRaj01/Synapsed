@@ -64,6 +64,7 @@ create table resources (
     segment_id uuid references segments(id) on delete set null,
     content_hash text not null,               -- sha256 of cleaned text, for de-duplication
     pii_redacted boolean not null default false,
+    pii_note text,                            -- set when names may remain (e.g. non-English text)
     status text not null default 'staged' check (status in ('staged','approved','rejected')),
     created_at timestamptz default timezone('utc', now()) not null,
     unique (campaign_id, content_hash)
