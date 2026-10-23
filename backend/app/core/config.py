@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     # Ingestion limits and tools.
     max_upload_mb: int = 50
 
+    # Jira Cloud (optional): when any of these is blank the "Create Jira issue" button is hidden.
+    jira_base_url: str = ""  # https://your-team.atlassian.net
+    jira_email: str = ""
+    jira_api_token: str = ""
+    jira_project_key: str = ""
+    jira_issue_type: str = "Task"
+
     # CORS: the deployed frontend origin (and the local dev server).
     frontend_origin: str = ""
 
