@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.chat import router as chat_router
 from app.api.ingestion import router as ingestion_router
+from app.api.insights import router as insights_router
 from app.api.prds import router as prds_router
 from app.api.report import router as report_router
 from app.api.runs import router as runs_router
@@ -43,6 +44,7 @@ app.add_middleware(
 
 app.include_router(chat_router)
 app.include_router(ingestion_router)
+app.include_router(insights_router)
 app.include_router(prds_router)
 app.include_router(report_router)
 app.include_router(runs_router)
