@@ -28,8 +28,9 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     gemini_embed_model: str = "gemini-embedding-001"
 
-    # Ingestion limits.
+    # Ingestion limits and tools.
     max_upload_mb: int = 50
+    tesseract_cmd: str = ""  # path to tesseract(.exe) when it is not on PATH
 
     # CORS: the deployed frontend origin (and the local dev server).
     frontend_origin: str = ""

@@ -5,7 +5,9 @@ import io
 import json
 import shutil
 from dataclasses import dataclass
-from pathlib import PurePath
+from pathlib import Path, PurePath
+
+from app.core.config import get_settings
 
 TEXT_EXT = {".txt", ".md", ".markdown"}
 JSON_EXT = {".json"}
@@ -99,14 +101,36 @@ def parse_pdf(data: bytes) -> str:
     return text
 
 
+_WINDOWS_TESSERACT = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+_PREFERRED_OCR_LANGS = ("eng", "msa", "tam")  # English, Malay, Tamil
+
+
+def find_tesseract() -> str | None:
+    """TESSERACT_CMD, then PATH, then the default Windows folder (its installer skips PATH)."""
+    for candidate in (get_settings().tesseract_cmd, shutil.which("tesseract"), _WINDOWS_TESSERACT):
+        if candidate and (shutil.which(candidate) or Path(candidate).is_file()):
+            return candidate
+    return None
+
+
+def ocr_languages(installed: list[str]) -> str:
+    """English plus Malay and Tamil where those language packs are installed."""
+    wanted = [lang for lang in _PREFERRED_OCR_LANGS if lang in installed]
+    return "+".join(wanted) or "eng"
+
+
 def parse_image(data: bytes) -> str:
     import pytesseract
     from PIL import Image, UnidentifiedImageError
 
-    if not shutil.which("tesseract"):
+    command = find_tesseract()
+    if not command:
         raise ToolMissing("Tesseract OCR is not installed on the server, so images cannot be read.")
+    pytesseract.pytesseract.tesseract_cmd = command
     try:
-        text = pytesseract.image_to_string(Image.open(io.BytesIO(data)))
+        text = pytesseract.image_to_string(
+            Image.open(io.BytesIO(data)), lang=ocr_languages(pytesseract.get_languages())
+        )
     except UnidentifiedImageError as exc:
         raise IngestError("Could not read the image file") from exc
     if not text.strip():
