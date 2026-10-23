@@ -17,8 +17,6 @@ presidio-analyzer
 presidio-anonymizer
 spacy
 pypdf
-pytesseract
-Pillow
 openpyxl
 python-multipart
 trafilatura

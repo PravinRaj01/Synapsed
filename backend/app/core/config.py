@@ -44,7 +44,6 @@ class Settings(BaseSettings):
 
     # Ingestion limits and tools.
     max_upload_mb: int = 50
-    tesseract_cmd: str = ""  # path to tesseract(.exe) when it is not on PATH
 
     # CORS: the deployed frontend origin (and the local dev server).
     frontend_origin: str = ""

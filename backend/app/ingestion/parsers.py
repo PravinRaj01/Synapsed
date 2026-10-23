@@ -1,13 +1,10 @@
-"""Turn uploaded files into plain text. Everything here is local and free."""
+"""Turn uploaded files into plain text. Images and scanned PDFs are read by Gemini (see ocr.py)."""
 
 import csv
 import io
 import json
-import shutil
 from dataclasses import dataclass
-from pathlib import Path, PurePath
-
-from app.core.config import get_settings
+from pathlib import PurePath
 
 TEXT_EXT = {".txt", ".md", ".markdown"}
 JSON_EXT = {".json"}
@@ -25,7 +22,7 @@ class IngestError(ValueError):
 
 
 class ToolMissing(IngestError):
-    """A system tool (Tesseract, ffmpeg) needed for this file type is not installed."""
+    """A tool or key needed for this file type (ffmpeg, the Gemini key) is not available."""
 
 
 def detect_kind(filename: str) -> str:
@@ -95,47 +92,19 @@ def parse_pdf(data: bytes) -> str:
         raise IngestError(f"Could not read the PDF: {exc}") from exc
     text = "\n\n".join(p for p in pages if p.strip())
     if not text.strip():
-        raise IngestError(
-            "This PDF has no selectable text (it looks scanned). Upload its pages as images to use OCR."
-        )
+        from app.ingestion import ocr
+
+        return ocr.read_text(data, "application/pdf")  # no text layer: it is a scan
     return text
 
 
-_WINDOWS_TESSERACT = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-_PREFERRED_OCR_LANGS = ("eng", "msa", "tam")  # English, Malay, Tamil
+def parse_image(data: bytes, filename: str) -> str:
+    from app.ingestion import ocr
 
-
-def find_tesseract() -> str | None:
-    """TESSERACT_CMD, then PATH, then the default Windows folder (its installer skips PATH)."""
-    for candidate in (get_settings().tesseract_cmd, shutil.which("tesseract"), _WINDOWS_TESSERACT):
-        if candidate and (shutil.which(candidate) or Path(candidate).is_file()):
-            return candidate
-    return None
-
-
-def ocr_languages(installed: list[str]) -> str:
-    """English plus Malay and Tamil where those language packs are installed."""
-    wanted = [lang for lang in _PREFERRED_OCR_LANGS if lang in installed]
-    return "+".join(wanted) or "eng"
-
-
-def parse_image(data: bytes) -> str:
-    import pytesseract
-    from PIL import Image, UnidentifiedImageError
-
-    command = find_tesseract()
-    if not command:
-        raise ToolMissing("Tesseract OCR is not installed on the server, so images cannot be read.")
-    pytesseract.pytesseract.tesseract_cmd = command
-    try:
-        text = pytesseract.image_to_string(
-            Image.open(io.BytesIO(data)), lang=ocr_languages(pytesseract.get_languages())
-        )
-    except UnidentifiedImageError as exc:
-        raise IngestError("Could not read the image file") from exc
-    if not text.strip():
-        raise IngestError("No text was found in the image")
-    return text
+    mime = ocr.MIME_BY_EXT.get(PurePath(filename).suffix.lower())
+    if not mime:
+        raise IngestError("Unsupported image type")
+    return ocr.read_text(data, mime)
 
 
 @dataclass
