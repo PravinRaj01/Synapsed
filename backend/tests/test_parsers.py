@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from openpyxl import Workbook
 
-from app.ingestion import parsers
+from app.ingestion import ocr, parsers
 from app.ingestion.parsers import IngestError, ToolMissing
 from app.ingestion.pipeline import prepare, resolve_source_type
 
@@ -66,10 +66,12 @@ def test_pdf_text_extraction():
     assert "checkout is slow" in parsers.parse_pdf(minimal_pdf("The checkout is slow"))
 
 
-def test_pdf_without_text_explains_what_to_do():
+def test_pdf_without_text_is_read_by_gemini(monkeypatch):
     blank = minimal_pdf("").replace(b"BT /F1 12 Tf 10 50 Td () Tj ET", b"")
-    with pytest.raises(IngestError, match="scanned"):
-        parsers.parse_pdf(blank)
+    calls = []
+    monkeypatch.setattr(ocr, "read_text", lambda data, mime: calls.append(mime) or "scanned words")
+    assert parsers.parse_pdf(blank) == "scanned words"
+    assert calls == ["application/pdf"]
 
 
 def test_garbage_pdf_is_a_user_error():
@@ -127,46 +129,68 @@ def test_table_needs_data_rows():
         parsers.parse_table(b"only,a,header\n", "x.csv")
 
 
-def test_image_ocr_requires_tesseract(monkeypatch):
-    monkeypatch.setattr(parsers, "find_tesseract", lambda: None)
+def test_image_is_sent_to_gemini_with_its_mime_type(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ocr, "read_text", lambda data, mime: calls.append((data, mime)) or "Checkout is slow")
+    assert parsers.parse_image(b"bytes", "Scan.JPG") == "Checkout is slow"
+    assert calls == [(b"bytes", "image/jpeg")]
+
+
+def test_unknown_image_type_is_rejected():
+    with pytest.raises(IngestError):
+        parsers.parse_image(b"x", "scan.gif")
+
+
+def fake_gemini(monkeypatch, reply=None, error=None, key="k"):
+    sent = {}
+
+    class Models:
+        def generate_content(self, **kwargs):
+            sent.update(kwargs)
+            if error:
+                raise error
+            return SimpleNamespace(text=reply)
+
+    monkeypatch.setattr(ocr, "get_settings", lambda: SimpleNamespace(google_api_key=key, gemini_model="m"))
+    monkeypatch.setattr(ocr, "_client", lambda: SimpleNamespace(models=Models()))
+    return sent
+
+
+def test_gemini_reply_is_returned_trimmed(monkeypatch):
+    sent = fake_gemini(monkeypatch, reply="  Hello Selamat pagi  ")
+    assert ocr.read_text(b"img", "image/png") == "Hello Selamat pagi"
+    assert sent["model"] == "m" and ocr.PROMPT in sent["contents"]
+
+
+@pytest.mark.parametrize("reply", ["", "   ", None, "NO_TEXT"])
+def test_empty_gemini_reply_means_no_text(monkeypatch, reply):
+    fake_gemini(monkeypatch, reply=reply)
+    with pytest.raises(IngestError, match="No text"):
+        ocr.read_text(b"img", "image/png")
+
+
+def test_missing_google_key_is_a_tool_error(monkeypatch):
+    fake_gemini(monkeypatch, reply="x", key="")
     with pytest.raises(ToolMissing):
-        parsers.parse_image(b"irrelevant")
+        ocr.read_text(b"img", "image/png")
 
 
-def test_find_tesseract_prefers_the_configured_path(monkeypatch, tmp_path):
-    fake = tmp_path / "tesseract.exe"
-    fake.write_text("")
-    monkeypatch.setattr(parsers, "get_settings", lambda: SimpleNamespace(tesseract_cmd=str(fake)))
-    assert parsers.find_tesseract() == str(fake)
+def test_oversized_file_is_refused_before_calling_gemini(monkeypatch):
+    sent = fake_gemini(monkeypatch, reply="x")
+    with pytest.raises(IngestError, match="too large"):
+        ocr.read_text(b"x" * (ocr.INLINE_LIMIT + 1), "application/pdf")
+    assert not sent
 
 
-def test_find_tesseract_falls_back_to_the_windows_install_folder(monkeypatch, tmp_path):
-    fake = tmp_path / "tesseract.exe"
-    fake.write_text("")
-    monkeypatch.setattr(parsers, "get_settings", lambda: SimpleNamespace(tesseract_cmd=""))
-    monkeypatch.setattr(parsers.shutil, "which", lambda _n: None)  # not on PATH
-    monkeypatch.setattr(parsers, "_WINDOWS_TESSERACT", str(fake))
-    assert parsers.find_tesseract() == str(fake)
-    monkeypatch.setattr(parsers, "_WINDOWS_TESSERACT", str(tmp_path / "missing.exe"))
-    assert parsers.find_tesseract() is None
+def test_gemini_errors_become_user_messages(monkeypatch):
+    from google.genai import errors
 
-
-def test_ocr_languages_use_only_installed_packs():
-    assert parsers.ocr_languages(["eng", "osd"]) == "eng"
-    assert parsers.ocr_languages(["tam", "eng", "msa", "osd"]) == "eng+msa+tam"
-    assert parsers.ocr_languages(["osd"]) == "eng"  # always a valid default
-
-
-@pytest.mark.skipif(parsers.find_tesseract() is None, reason="Tesseract is not installed")
-def test_image_ocr_reads_text():
-    from PIL import Image, ImageDraw, ImageFont
-
-    img = Image.new("RGB", (500, 120), "white")
-    ImageDraw.Draw(img).text((10, 40), "Checkout is slow", fill="black", font=ImageFont.load_default(size=36))
-    buf = io.BytesIO()
-    img.save(buf, "PNG")
-    assert "slow" in parsers.parse_image(buf.getvalue()).lower()
-
+    fake_gemini(monkeypatch, error=errors.ClientError(400, {"error": {"message": "bad"}}))
+    with pytest.raises(IngestError, match="could not read"):
+        ocr.read_text(b"img", "image/png")
+    fake_gemini(monkeypatch, error=errors.ServerError(503, {"error": {"message": "down"}}))
+    with pytest.raises(IngestError, match="unavailable"):
+        ocr.read_text(b"img", "image/png")
 
 def test_prepare_scrubs_hashes_and_tags_language():
     prepared = prepare("Contact jane.doe@example.com   about the   billing page being slow for our team.")
