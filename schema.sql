@@ -59,6 +59,7 @@ create table resources (
     source_url text,
     storage_path text,                        -- object key in Neon Object Storage
     content text not null,                    -- PII-scrubbed text
+    summary text,                             -- short preview shown while staged
     language text,
     segment_id uuid references segments(id) on delete set null,
     content_hash text not null,               -- sha256 of cleaned text, for de-duplication
