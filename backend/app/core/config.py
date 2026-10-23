@@ -28,6 +28,16 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     gemini_embed_model: str = "gemini-embedding-001"
 
+    # Chat models. Each id is a setting because free catalogs change without notice.
+    groq_model_fast: str = "openai/gpt-oss-20b"
+    gemini_model: str = "gemini-3.5-flash-lite"
+    sealion_api_key: str = ""
+    sealion_model: str = "aisingapore/Qwen-SEA-LION-v4.5-27B-IT"
+    # Provider order per language group; names are groq-fast, gemini, sealion.
+    llm_chain_en: str = "groq-fast,gemini,sealion"
+    llm_chain_other: str = "gemini,sealion,groq-fast"
+    llm_max_wait_seconds: float = 20.0  # longest we wait for a provider's budget before skipping it
+
     # Local name-detection models for non-English text (blank disables a model).
     pii_malay_model: str = "mesolitica/ner-t5-small-standard-bahasa-cased"
     pii_tamil_model: str = "Lokeshwaran/xlm-roberta-base-fintuned-panx-ta-hi"
