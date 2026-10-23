@@ -30,6 +30,7 @@ class IngestedResource(BaseModel):
     chars: int
     language: str | None
     redactions: dict[str, int]
+    pii_notice: str | None = None  # set when names may remain; review before approving
 
 
 class IngestResponse(BaseModel):
@@ -65,12 +66,12 @@ def _insert_resource(
     """Insert a staged resource, or report the existing one when the content is a duplicate."""
     row = conn.execute(
         """insert into resources (campaign_id, title, source_type, source_url, storage_path, content,
-                                  summary, language, segment_id, content_hash, pii_redacted)
-           values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                  summary, language, segment_id, content_hash, pii_redacted, pii_note)
+           values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            on conflict (campaign_id, content_hash) do nothing
            returning id, status""",
         (campaign_id, title, source_type, source_url, storage_path, prepared.text, summary,
-         prepared.language, segment_id, prepared.hash, prepared.pii_redacted),
+         prepared.language, segment_id, prepared.hash, prepared.pii_redacted, prepared.pii_note),
     ).fetchone()
     duplicate = row is None
     if duplicate:
@@ -81,6 +82,7 @@ def _insert_resource(
     return IngestedResource(
         id=row["id"], title=title, status=row["status"], duplicate=duplicate,
         chars=len(prepared.text), language=prepared.language, redactions=prepared.redactions,
+        pii_notice=prepared.pii_note,
     )
 
 
@@ -144,7 +146,7 @@ def list_resources(campaign_id: UUID, status: str | None = None, user: AuthUser 
     with user_tx(user.id) as conn:
         return conn.execute(
             """select r.id, r.title, r.source_type, r.source_url, r.language, r.status,
-                      r.pii_redacted, r.summary, r.created_at, length(r.content) as chars,
+                      r.pii_redacted, r.pii_note, r.summary, r.created_at, length(r.content) as chars,
                       (select count(*) from resource_chunks c where c.resource_id = r.id) as chunk_count
                from resources r
                where r.campaign_id = %s and (%s::text is null or r.status = %s)
