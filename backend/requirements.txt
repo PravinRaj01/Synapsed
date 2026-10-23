@@ -9,3 +9,17 @@ PyJWT
 cryptography
 httpx
 python-dotenv
+google-genai
+groq
+presidio-analyzer
+presidio-anonymizer
+spacy
+pypdf
+pytesseract
+Pillow
+openpyxl
+python-multipart
+trafilatura
+ddgs
+langdetect
+tenacity

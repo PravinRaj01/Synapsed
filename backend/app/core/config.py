@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     neon_storage_secret_key: str = ""
     neon_storage_bucket: str = "resources"
 
+    # AI providers.
+    groq_api_key: str = ""
+    groq_model_whisper: str = "whisper-large-v3-turbo"
+    google_api_key: str = ""
+    gemini_embed_model: str = "gemini-embedding-001"
+
+    # Ingestion limits.
+    max_upload_mb: int = 50
+
     # CORS: the deployed frontend origin (and the local dev server).
     frontend_origin: str = ""
 
