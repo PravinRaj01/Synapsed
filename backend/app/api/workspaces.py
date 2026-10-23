@@ -4,6 +4,7 @@ Everything runs under the signed-in user's row-level security: a user only ever 
 belong to, so a wrong or foreign id looks like "not found".
 """
 
+import logging
 from typing import Literal
 from uuid import UUID
 
@@ -12,8 +13,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from app.api.common import require_campaign
+from app.core import storage
 from app.core.auth import AuthUser, current_user
 from app.core.database import user_tx
+
+logger = logging.getLogger("synapsed.workspaces")
 
 router = APIRouter(prefix="/api/v1", tags=["workspaces"])
 
@@ -252,3 +256,56 @@ def delete_segment(segment_id: UUID, user: AuthUser = Depends(current_user)) -> 
         row = conn.execute("delete from segments where id = %s returning id", (segment_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "Segment not found")
+
+
+# ---------------------------------------------------------------- deletion
+
+def _remove_files(keys: list[str]) -> int:
+    """Delete stored files after their rows are gone. A failure is logged, never raised: the data is already deleted."""
+    failed = 0
+    for key in keys:
+        try:
+            storage.delete_object(key)
+        except Exception:
+            failed += 1
+            logger.warning("Could not delete stored file %s", key, exc_info=True)
+    return failed
+
+
+@router.delete("/campaigns/{campaign_id}", status_code=204)
+def delete_campaign(campaign_id: UUID, user: AuthUser = Depends(current_user)) -> None:
+    """Delete a campaign with everything in it (sources, insights, themes, roadmap, PRDs) and its stored files.
+
+    Owners and PMs may do this; other members get 403.
+    """
+    with user_tx(user.id) as conn:
+        row = conn.execute(
+            "select m.role from campaigns c join workspace_members m on m.workspace_id = c.workspace_id and m.user_id = %s "
+            "where c.id = %s", (user.id, campaign_id),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Campaign not found")
+        if row["role"] not in ("owner", "pm"):
+            raise HTTPException(403, "Only an owner or PM can delete a campaign")
+        keys = [r["storage_path"] for r in conn.execute(
+            "select distinct storage_path from resources where campaign_id = %s and storage_path is not null", (campaign_id,)).fetchall()]
+        conn.execute("delete from campaigns where id = %s", (campaign_id,))
+    _remove_files(keys)
+
+
+@router.delete("/workspaces/{workspace_id}", status_code=204)
+def delete_workspace(workspace_id: UUID, user: AuthUser = Depends(current_user)) -> None:
+    """Delete a workspace with all its campaigns and stored files. Only an owner may."""
+    with user_tx(user.id) as conn:
+        row = conn.execute(
+            "select role from workspace_members where workspace_id = %s and user_id = %s", (workspace_id, user.id)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Workspace not found")
+        if row["role"] != "owner":
+            raise HTTPException(403, "Only the owner can delete a workspace")
+        keys = [r["storage_path"] for r in conn.execute(
+            "select distinct r.storage_path from resources r join campaigns c on c.id = r.campaign_id "
+            "where c.workspace_id = %s and r.storage_path is not null", (workspace_id,)).fetchall()]
+        conn.execute("delete from workspaces where id = %s", (workspace_id,))
+    _remove_files(keys)

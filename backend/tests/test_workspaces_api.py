@@ -175,3 +175,104 @@ def test_users_cannot_see_or_touch_each_others_data(world):
     assert world.patch(f"/api/v1/segments/{sid}", json={"weight": 9}).status_code == 404
     assert world.delete(f"/api/v1/segments/{sid}").status_code == 404
     assert world.post("/api/v1/campaigns", json={"workspace_id": ws["id"], "name": "Intruder"}).status_code == 404
+
+
+# ---------------------------------------------------------------- deletion
+
+from app.api import workspaces as ws_api  # noqa: E402
+
+
+@pytest.fixture
+def stored_files(monkeypatch):
+    removed = []
+    monkeypatch.setattr(ws_api.storage, "delete_object", lambda key: removed.append(key))
+    return removed
+
+
+def add_member(workspace_id, user_id, role):
+    with psycopg.connect(settings.database_url_admin) as admin:
+        admin.execute("insert into workspace_members (workspace_id, user_id, role) values (%s, %s, %s)", (workspace_id, user_id, role))
+
+
+def fill(world, campaign_id):
+    """Resources (two sharing one stored file), an insight, a theme and a roadmap item."""
+    with database.user_tx(world.who.id) as conn:
+        for n, path in enumerate(("c/a/one.txt", "c/a/one.txt", "c/b/two.txt", None)):
+            conn.execute(
+                "insert into resources (campaign_id, title, source_type, content, content_hash, storage_path) "
+                "values (%s, %s, 'transcript', 'x', %s, %s)", (campaign_id, f"r{n}", f"h{n}", path))
+        theme = conn.execute("insert into themes (campaign_id, label, color_code) values (%s, 'T', '#000') returning id", (campaign_id,)).fetchone()["id"]
+        conn.execute("insert into insights (campaign_id, theme_id, summary_text) values (%s, %s, 'pain')", (campaign_id, theme))
+        conn.execute("insert into roadmap_items (campaign_id, theme_id, title, description, horizon, impact_score, confidence_score, ease_score) "
+                     "values (%s, %s, 'item', 'd', 'now', 5, 5, 5)", (campaign_id, theme))
+
+
+def counts(world, campaign_id):
+    with database.user_tx(world.who.id) as conn:
+        return {t: conn.execute(f"select count(*) as n from {t} where campaign_id = %s", (campaign_id,)).fetchone()["n"]
+                for t in ("resources", "insights", "themes", "roadmap_items")}
+
+
+def test_deleting_a_campaign_removes_everything_in_it_and_its_files_once(world, stored_files):
+    ws = workspace(world)
+    doomed, kept = campaign(world, ws, segments=[{"name": "Enterprise"}]), campaign(world, ws)
+    fill(world, doomed["id"]), fill(world, kept["id"])
+    assert counts(world, doomed["id"]) == {"resources": 4, "insights": 1, "themes": 1, "roadmap_items": 1}
+
+    assert world.delete(f"/api/v1/campaigns/{doomed['id']}").status_code == 204
+    assert sorted(stored_files) == ["c/a/one.txt", "c/b/two.txt"]  # each file once, rows without a file skipped
+    assert counts(world, doomed["id"]) == {"resources": 0, "insights": 0, "themes": 0, "roadmap_items": 0}
+    assert counts(world, kept["id"])["resources"] == 4  # the other campaign is untouched
+    assert world.get(f"/api/v1/campaigns/{doomed['id']}").status_code == 404
+    assert world.delete(f"/api/v1/campaigns/{doomed['id']}").status_code == 404
+    assert [c["id"] for c in world.get("/api/v1/campaigns").json()] == [kept["id"]]
+
+
+def test_a_storage_failure_does_not_undo_the_delete(world, monkeypatch):
+    c = campaign(world, workspace(world))
+    fill(world, c["id"])
+
+    def broken(key):
+        raise RuntimeError("storage down")
+
+    monkeypatch.setattr(ws_api.storage, "delete_object", broken)
+    assert world.delete(f"/api/v1/campaigns/{c['id']}").status_code == 204
+    assert world.get(f"/api/v1/campaigns/{c['id']}").status_code == 404
+
+
+def test_only_owners_and_pms_may_delete_a_campaign(world, stored_files):
+    ws = workspace(world)
+    c = campaign(world, ws)
+    owner = world.who.id
+    viewer, pm, stranger = uuid4(), uuid4(), uuid4()
+    add_member(ws["id"], viewer, "viewer")
+    add_member(ws["id"], pm, "pm")
+
+    world.who.id = viewer
+    assert world.delete(f"/api/v1/campaigns/{c['id']}").status_code == 403
+    world.who.id = stranger
+    assert world.delete(f"/api/v1/campaigns/{c['id']}").status_code == 404
+    world.who.id = owner
+    assert world.get(f"/api/v1/campaigns/{c['id']}").status_code == 200 and stored_files == []
+    world.who.id = pm
+    assert world.delete(f"/api/v1/campaigns/{c['id']}").status_code == 204
+
+
+def test_deleting_a_workspace_removes_its_campaigns_and_files_and_needs_the_owner(world, stored_files):
+    ws = workspace(world)
+    first, second = campaign(world, ws), campaign(world, ws)
+    fill(world, first["id"]), fill(world, second["id"])
+    owner, pm = world.who.id, uuid4()
+    add_member(ws["id"], pm, "pm")
+
+    world.who.id = pm
+    assert world.delete(f"/api/v1/workspaces/{ws['id']}").status_code == 403
+    world.who.id = uuid4()
+    assert world.delete(f"/api/v1/workspaces/{ws['id']}").status_code == 404
+    world.who.id = owner
+    assert world.get(f"/api/v1/campaigns/{first['id']}").status_code == 200 and stored_files == []
+
+    assert world.delete(f"/api/v1/workspaces/{ws['id']}").status_code == 204
+    assert sorted(set(stored_files)) == ["c/a/one.txt", "c/b/two.txt"]
+    assert world.get("/api/v1/workspaces").json() == [] and world.get("/api/v1/campaigns").json() == []
+    assert world.delete(f"/api/v1/workspaces/{ws['id']}").status_code == 404

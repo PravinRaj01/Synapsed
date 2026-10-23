@@ -102,6 +102,18 @@ def test_markers_for_sources_that_do_not_exist_are_removed():
     assert r.answer == "Login fails [1] and billing too ." and [c.n for c in r.citations] == [1]
 
 
+def test_missing_inline_markers_are_added_when_the_listed_quotes_are_really_in_the_sources():
+    r = cl.parse_answer(reply(answer="SSO login fails every morning.", sources=[
+        {"n": 1, "quote": "SSO login fails every morning"}, {"n": 2, "quote": "something never said"}, {"n": 9, "quote": "x" * 20}]), HITS)
+    assert not r.refused and r.answer == "SSO login fails every morning. [1]"
+    assert [(c.n, c.verified) for c in r.citations] == [(1, True)]  # unfindable and out-of-range sources are not trusted
+
+
+def test_no_markers_and_no_findable_quote_is_still_a_refusal():
+    r = cl.parse_answer(reply(answer="Users dislike it.", sources=[{"n": 1, "quote": "a made-up sentence"}]), HITS)
+    assert r.refused and r.reason == "ungrounded"
+
+
 @pytest.mark.parametrize("answer,reason", [
     (None, "not_in_sources"), ("", "not_in_sources"), ("   ", "not_in_sources"),
     ("Users dislike it.", "ungrounded"), ("Users dislike it [9].", "ungrounded"),

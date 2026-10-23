@@ -3,7 +3,9 @@
 The model is asked for JSON: an answer with [n] markers and, for each source it cites, a quote copied
 from that source. Nothing it says is trusted blindly:
 - a marker that does not match a source number is removed;
-- an answer left with no valid marker is treated as a refusal (it is not grounded);
+- an answer is grounded if it keeps a valid marker, or if at least one of the quotes the model listed is really
+  found in its source (small models often list good quotes but forget the inline markers; the markers are then
+  added at the end). An answer with neither is treated as a refusal;
 - each quote is located in the source text, and a citation points at the exact words only when the
   quote was really found (otherwise it points at the whole retrieved passage and says so).
 """
@@ -91,10 +93,6 @@ def parse_answer(reply: str, hits: list[Hit]) -> ChatResult:
     valid = set(range(1, len(hits) + 1))
     answer = _MARKER.sub(lambda m: m.group(0) if int(m.group(1)) in valid else "", answer)
     answer = re.sub(r"[ \t]{2,}", " ", answer).strip()
-    cited = sorted({int(n) for n in _MARKER.findall(answer)})
-    if not cited:
-        return ChatResult(None, reason="ungrounded")
-
     quotes = {}
     for entry in data.get("sources") or []:
         if isinstance(entry, dict) and isinstance(entry.get("quote"), str):
@@ -102,4 +100,11 @@ def parse_answer(reply: str, hits: list[Hit]) -> ChatResult:
                 quotes.setdefault(int(entry.get("n")), entry["quote"])
             except (TypeError, ValueError):
                 continue
+
+    cited = sorted({int(n) for n in _MARKER.findall(answer)})
+    if not cited:
+        cited = sorted(n for n, quote in quotes.items() if n in valid and locate_quote(hits[n - 1].content, quote))
+        if not cited:
+            return ChatResult(None, reason="ungrounded")
+        answer = f"{answer} {''.join(f'[{n}]' for n in cited)}"
     return ChatResult(answer, [_citation(n, hits[n - 1], quotes.get(n)) for n in cited])
