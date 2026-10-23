@@ -2,11 +2,14 @@
 
 Runs before text is stored or sent to any LLM. Presidio (spaCy small model) finds
 names, emails and phone numbers; a regex pass then catches anything it missed, and
-is also the fallback if Presidio cannot load. Redactions become tokens such as
-<PERSON>, so stored text and chunk offsets always refer to the scrubbed text.
+is also the fallback when the name detector cannot be trusted. Redactions become
+tokens such as <PERSON>, so stored text and chunk offsets refer to the scrubbed text.
 
-Limit: the spaCy model is English-only, so names in Malay or Tamil text are not
-detected by the NER step; emails and phone numbers are still caught by regex.
+The name detector is an English-only model. On other languages it guesses, and it
+turns ordinary words into <PERSON> (a Malay interview lost 1 word in 6), which
+ruins the text for analysis. So names are only detected in English text. Anywhere
+else only emails and phone numbers are scrubbed, and the result carries a notice so
+the user can review the text before approving it.
 """
 
 import logging
@@ -15,11 +18,16 @@ from collections import Counter
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from app.core.language import detect_language
+
 logger = logging.getLogger("synapsed.pii")
 # Presidio warns on every call about spaCy labels it does not map (CARDINAL, DATE, ...).
 logging.getLogger("presidio-analyzer").setLevel(logging.ERROR)
 
 ENTITIES = ["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER"]
+NER_LANGUAGES = {"en"}
+MAX_PERSON_RATE = 0.10  # if more than 10% of the words are "names", the model is guessing
+MIN_WORDS_FOR_RATE = 40
 _BLOCK_CHARS = 50_000  # keep each Presidio call well under spaCy's length limit
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
@@ -31,7 +39,8 @@ _DATE_LIKE = re.compile(r"^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$|^\d{1,2}[-/.]\d{1,2}[-
 class ScrubResult:
     text: str
     redactions: dict[str, int] = field(default_factory=dict)
-    engine: str = "presidio"
+    engine: str = "presidio"  # "regex" when names were not detected
+    notice: str | None = None  # set when names may remain in the text
 
     @property
     def total(self) -> int:
@@ -106,14 +115,42 @@ def _regex_scrub(text: str, counts: Counter) -> str:
     return _PHONE.sub(_phone_sub(counts), text)
 
 
+def names_look_unreliable(person_count: int, word_count: int) -> bool:
+    """True when so many words were tagged as names that the detector must be guessing."""
+    return word_count >= MIN_WORDS_FOR_RATE and person_count / word_count > MAX_PERSON_RATE
+
+
+def _regex_only(text: str, notice: str) -> ScrubResult:
+    counts: Counter = Counter()
+    return ScrubResult(_regex_scrub(text, counts), dict(counts), engine="regex", notice=notice)
+
+
 def scrub_pii(text: str) -> ScrubResult:
     """Redact names, emails and phone numbers. Never raises: falls back to regex only."""
+    language = detect_language(text)
+    if language is not None and language not in NER_LANGUAGES:
+        return _regex_only(
+            text,
+            f"Names were not scrubbed: the text looks like '{language}' and name detection only "
+            "supports English. Emails and phone numbers were scrubbed. Review before approving.",
+        )
+
     counts: Counter = Counter()
-    engine = "presidio"
     try:
-        text = _presidio_scrub(text, counts)
+        scrubbed = _presidio_scrub(text, counts)
     except Exception:  # model missing, spaCy error, ...
         logger.warning("Presidio unavailable; using regex-only PII scrubbing", exc_info=True)
-        engine = "regex"
-    text = _regex_scrub(text, counts)  # catches what NER missed; sole pass in fallback mode
-    return ScrubResult(text=text, redactions=dict(counts), engine=engine)
+        return _regex_only(
+            text, "Names were not scrubbed: name detection was unavailable. Review before approving."
+        )
+
+    if names_look_unreliable(counts.get("PERSON", 0), len(text.split())):
+        logger.warning("Name detection tagged %s words as names; discarding it", counts["PERSON"])
+        return _regex_only(
+            text,
+            "Names were not scrubbed: name detection looked unreliable on this text and was "
+            "skipped. Emails and phone numbers were scrubbed. Review before approving.",
+        )
+
+    scrubbed = _regex_scrub(scrubbed, counts)  # catches what NER missed
+    return ScrubResult(text=scrubbed, redactions=dict(counts))
