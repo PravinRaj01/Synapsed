@@ -6,7 +6,7 @@ from app.core.pii_shield import scrub_pii
 
 @pytest.fixture(autouse=True)
 def no_name_models(monkeypatch):
-    """By default no Malay/Tamil model is used, so these tests never download one."""
+    """By default no Malay model is used, so these tests never download one."""
     monkeypatch.setattr(pii_shield.name_models, "detector_for", lambda _language: None)
 
 
@@ -128,15 +128,6 @@ def test_malay_uses_the_name_model_when_one_is_available(monkeypatch):
     assert "Malay name model that can miss some names" in result.notice
 
 
-def test_tamil_uses_its_own_label(monkeypatch):
-    def spans(text):
-        start = text.index("tamil@")  # any span: only the routing is under test
-        return [(start, start + 3)]
-
-    fake_detector(monkeypatch, "Tamil", spans)
-    assert scrub_pii(TAMIL).engine == "tamil-model"
-
-
 def test_a_failing_name_model_falls_back_to_regex(monkeypatch):
     def broken(_text):
         raise OSError("could not download model")
@@ -159,4 +150,4 @@ def test_languages_without_a_model_still_get_the_review_notice(monkeypatch):
     fake_detector(monkeypatch, "Malay", lambda text: [], language_filter={"ms", "id"})
     thai = "ฉันต้องการข้อมูลเพิ่มเติมเกี่ยวกับการจัดการขยะในร้านอาหารของเรา กรุณาติดต่อ test@example.com"
     result = scrub_pii(thai)
-    assert result.engine == "regex" and "English, Malay and Tamil" in result.notice
+    assert result.engine == "regex" and "English and Malay" in result.notice

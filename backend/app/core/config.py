@@ -40,7 +40,6 @@ class Settings(BaseSettings):
 
     # Local name-detection models for non-English text (blank disables a model).
     pii_malay_model: str = "mesolitica/ner-t5-small-standard-bahasa-cased"
-    pii_tamil_model: str = "Lokeshwaran/xlm-roberta-base-fintuned-panx-ta-hi"
     pii_warmup: bool = False  # load the models at startup instead of on first use
 
     # Ingestion limits and tools.

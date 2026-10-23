@@ -36,38 +36,15 @@ def test_punctuation_only_spans_are_dropped():
     assert nm.merge_spans("a ... b", [(2, 5)]) == []
 
 
-def test_spans_grow_to_whole_words():
-    text = "பிரியா சுரேஷ் பேசினார்"
-    start = text.index("யா")
-    assert nm.expand_to_words(text, [(start, start + 2)]) == [(0, len("பிரியா"))]
-    grown = nm.expand_to_words(text, [(2, 9)])
-    assert text[grown[0][0] : grown[0][1]].count(" ") <= 1 and grown[0][0] == 0
-
-
-def test_windows_cover_the_text_exactly_and_cut_at_spaces():
-    text = " ".join(f"word{i}" for i in range(200))
-    pieces = list(nm.windows(text, 100))
-    assert "".join(p for _, p in pieces) == text
-    assert all(len(p) <= 100 for _, p in pieces)
-    assert all(text[o : o + len(p)] == p for o, p in pieces)  # offsets are exact
-    assert all(not p.endswith("wor") for _, p in pieces[:-1])  # no word is cut in half
-
-
-def test_windows_handle_text_without_spaces():
-    pieces = list(nm.windows("x" * 250, 100))
-    assert [len(p) for _, p in pieces] == [100, 100, 50]
-
-
 def test_detector_routing_and_the_off_switch(monkeypatch):
-    on = SimpleNamespace(pii_malay_model="m", pii_tamil_model="t")
+    on = SimpleNamespace(pii_malay_model="m")
     monkeypatch.setattr(nm, "get_settings", lambda: on)
     assert nm.detector_for("ms")[0] == "Malay" and nm.detector_for("id")[0] == "Malay"
-    assert nm.detector_for("ta")[0] == "Tamil"
     assert nm.detector_for("th") is None and nm.detector_for(None) is None
 
-    off = SimpleNamespace(pii_malay_model="", pii_tamil_model="")
+    off = SimpleNamespace(pii_malay_model="")
     monkeypatch.setattr(nm, "get_settings", lambda: off)
-    assert nm.detector_for("ms") is None and nm.detector_for("ta") is None
+    assert nm.detector_for("ms") is None
 
 
 def test_malay_label_id_is_person():
