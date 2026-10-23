@@ -2,6 +2,7 @@ from functools import lru_cache
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from app.core.config import get_settings
 
@@ -39,6 +40,16 @@ def upload_bytes(key: str, data: bytes, content_type: str = "application/octet-s
 def download_bytes(key: str) -> bytes:
     response = _client().get_object(Bucket=get_settings().neon_storage_bucket, Key=key)
     return response["Body"].read()
+
+
+def object_size(key: str) -> int | None:
+    """Size in bytes of a stored object, or None when it does not exist."""
+    try:
+        return _client().head_object(Bucket=get_settings().neon_storage_bucket, Key=key)["ContentLength"]
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            return None
+        raise
 
 
 def delete_object(key: str) -> None:
