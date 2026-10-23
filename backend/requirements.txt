@@ -1,3 +1,5 @@
+# CPU-only PyTorch wheels (the default Linux wheels bundle ~2 GB of CUDA libraries we do not use)
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi
 uvicorn[standard]
 pydantic>=2.9
@@ -23,3 +25,7 @@ trafilatura
 ddgs
 langdetect
 tenacity
+torch
+transformers
+sentencepiece
+protobuf
