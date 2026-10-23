@@ -59,17 +59,19 @@ def default_deps(user_id: str, campaign_id: str, run_id: str) -> Deps:
     )
 
 
-def initial_state(user_id: str, campaign_id: str, run_id: str, resource_ids: list[str] | None) -> RunState:
+def initial_state(
+    user_id: str, campaign_id: str, run_id: str, resource_ids: list[str] | None, max_resources: int | None = None
+) -> RunState:
     return {"user_id": str(user_id), "campaign_id": str(campaign_id), "run_id": run_id,
-            "only_resources": resource_ids, "errors": []}
+            "only_resources": resource_ids, "max_resources": max_resources, "errors": []}
 
 
 def run_analysis(
     user_id, campaign_id, *, resource_ids: list[str] | None = None, deps: Deps | None = None,
-    run_id: str | None = None,
+    run_id: str | None = None, max_resources: int | None = None,
 ) -> RunState:
     """Analyse the campaign's approved, not-yet-analysed resources and return the final state."""
     run_id = run_id or str(uuid4())
     deps = deps or default_deps(str(user_id), str(campaign_id), run_id)
-    state = initial_state(user_id, campaign_id, run_id, resource_ids)
+    state = initial_state(user_id, campaign_id, run_id, resource_ids, max_resources)
     return build_graph().invoke(state, config={"configurable": {"deps": deps}})

@@ -51,7 +51,7 @@ def select_node(state: RunState, deps: Deps) -> dict:
                where campaign_id = %s and status = 'approved' and analyzed_at is null
                  and (%s::uuid[] is null or id = any(%s::uuid[]))
                order by created_at limit %s""",
-            (state["campaign_id"], only, only, MAX_RESOURCES_PER_RUN),
+            (state["campaign_id"], only, only, min(MAX_RESOURCES_PER_RUN, state.get("max_resources") or MAX_RESOURCES_PER_RUN)),
         ).fetchall()
     return {"resource_ids": [str(r["id"]) for r in rows]}
 
