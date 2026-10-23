@@ -1,5 +1,5 @@
-"""Runs the real Malay and Tamil models. Opt in with RUN_MODEL_TESTS=1: the first run downloads
-about 140 MB (Malay) and 1.1 GB (Tamil) from Hugging Face."""
+"""Runs the real Malay model. Opt in with RUN_MODEL_TESTS=1: the first run downloads
+about 140 MB from Hugging Face."""
 
 import os
 
@@ -33,14 +33,3 @@ def test_malay_model_redacts_names_and_keeps_the_rest():
             assert name not in result.text
         for phrase in kept:
             assert phrase in result.text
-
-
-def test_tamil_model_redacts_names_and_leaves_plain_sentences_alone():
-    named = "என் பெயர் ராஜேஷ் குமார், நான் கடையில் மேலாளராக வேலை செய்கிறேன். தொடர்புக்கு: tamil@example.com"
-    result = scrub_pii(named)
-    assert result.engine == "tamil-model", result.notice
-    assert "ராஜேஷ்" not in result.text and "குமார்" not in result.text
-    assert "tamil@example.com" not in result.text and "கடையில்" in result.text
-
-    plain = "எங்கள் கடையில் கழிவு மேலாண்மை மிகவும் கடினமாக உள்ளது. தினமும் நிறைய உணவு கழிவு வருகிறது."
-    assert scrub_pii(plain).text == plain

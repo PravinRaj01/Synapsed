@@ -6,7 +6,7 @@ is also the fallback when the name detector cannot be trusted. Redactions become
 tokens such as <PERSON>, so stored text and chunk offsets refer to the scrubbed text.
 
 English text uses spaCy through Presidio. That model is English-only: on other languages it guesses
-and turns ordinary words into <PERSON> (a Malay interview lost 1 word in 6). Malay and Tamil text
+and turns ordinary words into <PERSON> (a Malay interview lost 1 word in 6). Malay text
 therefore use local models (app/core/name_models.py), and any other language gets regex scrubbing
 of emails and phone numbers only. Every non-English result carries a notice so the user can
 review the text before approving it.
@@ -127,7 +127,7 @@ def _regex_only(text: str, notice: str) -> ScrubResult:
 
 
 def _scrub_with_name_model(text: str, label: str, person_spans) -> ScrubResult:
-    """Malay/Tamil path: a local model finds the names, regex handles emails and phones."""
+    """Malay path: a local model finds the names, regex handles emails and phones."""
     spans = person_spans(text)
     if names_look_unreliable(len(spans), len(text.split())):
         logger.warning("%s name model tagged %s spans; discarding it", label, len(spans))
@@ -164,7 +164,7 @@ def scrub_pii(text: str) -> ScrubResult:
         return _regex_only(
             text,
             f"Names were not scrubbed: the text looks like '{language}' and name detection only "
-            "supports English, Malay and Tamil. Emails and phone numbers were scrubbed. "
+            "supports English and Malay. Emails and phone numbers were scrubbed. "
             "Review before approving.",
         )
 

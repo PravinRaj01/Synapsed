@@ -1,14 +1,11 @@
-"""Local name detectors for Malay and Tamil text (they run on our server, so raw text never
-leaves it before scrubbing). Models load lazily on first use and are cached.
+"""Local name detector for Malay text (it runs on our server, so raw text never
+leaves it before scrubbing). The model loads lazily on first use and is cached.
 
 - Malay/Indonesian: mesolitica/ner-t5-small-standard-bahasa-cased, a small token classifier.
   It was trained on standard written Malay, so colloquial speech may be missed, and its
   "person" tag also catches some food words ("nasi lemak").
-- Tamil: Lokeshwaran/xlm-roberta-base-fintuned-panx-ta-hi (MIT), a community model. It splits
-  names across sub-words (handled by expanding to whole words) and does not see Latin-script
-  names inside Tamil text.
 
-Both are detectors of names only; the callers keep a review notice on their results.
+It detects names only; the callers keep a review notice on its results. Tamil is future work.
 """
 
 import re
@@ -22,7 +19,6 @@ from app.core.config import get_settings
 MALAY_PERSON_LABEL_ID = 4
 MALAY_LANGUAGES = {"ms", "id"}  # langdetect answers "id" for most Malay
 MALAY_WINDOW_WORDS = 120
-TAMIL_WINDOW_CHARS = 800
 
 Span = tuple[int, int]
 _WORD = re.compile(r"\S+")
@@ -35,15 +31,6 @@ def _malay():
 
     name = get_settings().pii_malay_model
     return AutoTokenizer.from_pretrained(name), AutoModelForTokenClassification.from_pretrained(name).eval()
-
-
-@lru_cache
-def _tamil():
-    from transformers import pipeline
-
-    return pipeline(
-        "token-classification", model=get_settings().pii_tamil_model, aggregation_strategy="simple"
-    )
 
 
 def _trim(text: str, start: int, end: int) -> Span | None:
@@ -68,35 +55,11 @@ def merge_spans(text: str, spans: list[Span]) -> list[Span]:
     return merged
 
 
-def expand_to_words(text: str, spans: list[Span]) -> list[Span]:
-    """Grow each span to the whole whitespace-delimited word at both ends."""
-    grown = []
-    for start, end in spans:
-        while start > 0 and not text[start - 1].isspace():
-            start -= 1
-        while end < len(text) and not text[end].isspace():
-            end += 1
-        grown.append((start, end))
-    return grown
-
-
 def redact_spans(text: str, spans: list[Span], token: str = "<PERSON>") -> tuple[str, int]:
     """Replace each span with a token. Returns the new text and how many spans were replaced."""
     for start, end in sorted(spans, reverse=True):
         text = text[:start] + token + text[end:]
     return text, len(spans)
-
-
-def windows(text: str, size: int) -> Iterator[tuple[int, str]]:
-    """(offset, piece) pieces of at most `size` characters, cut at whitespace where possible."""
-    pos = 0
-    while pos < len(text):
-        end = min(pos + size, len(text))
-        if end < len(text):
-            cut = text.rfind(" ", pos + size // 2, end)
-            end = cut + 1 if cut != -1 else end
-        yield pos, text[pos:end]
-        pos = end
 
 
 def malay_person_spans(text: str) -> list[Span]:
@@ -123,29 +86,16 @@ def malay_person_spans(text: str) -> list[Span]:
     return merge_spans(text, flagged)
 
 
-def tamil_person_spans(text: str) -> list[Span]:
-    ner = _tamil()
-    found: list[Span] = []
-    for offset, piece in windows(text, TAMIL_WINDOW_CHARS):
-        for entity in ner(piece):
-            if entity["entity_group"] == "PER":
-                found.append((offset + entity["start"], offset + entity["end"]))
-    return merge_spans(text, expand_to_words(text, found))
-
-
 def detector_for(language: str | None) -> tuple[str, Callable[[str], list[Span]]] | None:
     """(label, function) for a language, or None when it has no model or the model is disabled."""
     settings = get_settings()
     if language in MALAY_LANGUAGES and settings.pii_malay_model:
         return "Malay", malay_person_spans
-    if language == "ta" and settings.pii_tamil_model:
-        return "Tamil", tamil_person_spans
     return None
 
 
 def warm_up() -> None:
-    """Load the enabled models now, so the first upload does not wait for them."""
-    for language in ("ms", "ta"):
-        found = detector_for(language)
-        if found:
-            found[1]("Ahmad" if language == "ms" else "ராஜேஷ்")
+    """Load the Malay model now, so the first upload does not wait for it."""
+    found = detector_for("ms")
+    if found:
+        found[1]("Ahmad")
