@@ -188,3 +188,55 @@ def test_source_type_relabelling_rules():
         resolve_source_type("audio", "survey")
     with pytest.raises(IngestError):
         resolve_source_type("table", "transcript")
+
+
+def fake_groq(monkeypatch, reply="hello there", key="k"):
+    from app.ingestion import transcribe as tr
+
+    sent = {}
+
+    class Transcriptions:
+        def create(self, **kwargs):
+            sent.update(kwargs)
+            return reply
+
+    monkeypatch.setattr(tr, "get_settings", lambda: SimpleNamespace(groq_api_key=key, groq_model_whisper="w"))
+    monkeypatch.setattr(tr, "Groq", lambda api_key: SimpleNamespace(audio=SimpleNamespace(transcriptions=Transcriptions())))
+    return tr, sent
+
+
+@pytest.mark.parametrize("name", ["call.mp3", "demo.MP4", "rec.webm", "voice.m4a"])
+def test_audio_and_video_go_straight_to_whisper(monkeypatch, name):
+    tr, sent = fake_groq(monkeypatch, reply="  hello there  ")
+    assert tr.transcribe(b"media", name) == "hello there"
+    assert sent["file"] == (name, b"media") and sent["model"] == "w"
+
+
+@pytest.mark.parametrize("name", ["clip.mkv", "clip.avi", "voice.aac"])
+def test_formats_whisper_does_not_take_are_explained(monkeypatch, name):
+    tr, sent = fake_groq(monkeypatch)
+    with pytest.raises(IngestError, match="Convert"):
+        tr.transcribe(b"media", name)
+    assert not sent
+
+
+def test_recordings_over_the_limit_are_refused_before_upload(monkeypatch):
+    tr, sent = fake_groq(monkeypatch)
+    with pytest.raises(IngestError, match="over 24 MB"):
+        tr.transcribe(b"x" * (tr.SEND_LIMIT + 1), "long.mp3")
+    assert not sent
+
+
+def test_silence_and_a_missing_key_are_clear_errors(monkeypatch):
+    tr, _ = fake_groq(monkeypatch, reply="   ")
+    with pytest.raises(IngestError, match="No speech"):
+        tr.transcribe(b"media", "quiet.wav")
+    tr, _ = fake_groq(monkeypatch, key="")
+    with pytest.raises(ToolMissing):
+        tr.transcribe(b"media", "call.wav")
+
+
+def test_mov_is_sent_under_the_mp4_name(monkeypatch):
+    tr, sent = fake_groq(monkeypatch)
+    tr.transcribe(b"media", "Clip 1.MOV")
+    assert sent["file"] == ("Clip 1.mp4", b"media")

@@ -1,67 +1,48 @@
 """Speech-to-text through Groq Whisper (free tier, 25 MB per request).
 
-ffmpeg converts anything to small mono MP3 pieces so long recordings and videos fit.
-Without ffmpeg, an audio file under the size limit is sent as-is; video needs ffmpeg.
+The file goes to Groq as-is: audio and video alike, in any format Groq accepts. There is no
+ffmpeg on the server. A recording over the limit is split or compressed in the browser
+(ffmpeg.wasm) before it is uploaded.
 """
 
-import subprocess
-import tempfile
-from pathlib import Path, PurePath
-import shutil
+from pathlib import PurePath
 
 from groq import Groq
 
 from app.core.config import get_settings
-from app.ingestion.parsers import AUDIO_EXT, IngestError, ToolMissing
+from app.ingestion.parsers import IngestError, ToolMissing
 
-DIRECT_LIMIT = 24 * 1024 * 1024
-SEGMENT_SECONDS = 600  # at 32 kbps a 10-minute piece is about 2.4 MB
+SEND_LIMIT = 24 * 1024 * 1024  # Groq's free tier allows 25 MB; keep a margin for the request
+GROQ_FORMATS = {".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".wav", ".webm"}
+SAME_CONTAINER = {".mov": ".mp4"}  # QuickTime and MP4 share a container; Groq reads it under the mp4 name
 
 
 def _groq() -> Groq:
     key = get_settings().groq_api_key
     if not key:
-        raise IngestError("GROQ_API_KEY is not set, so audio cannot be transcribed")
+        raise ToolMissing("GROQ_API_KEY is not set, so audio cannot be transcribed.")
     return Groq(api_key=key)
 
 
-def _transcribe_piece(name: str, data: bytes) -> str:
+def transcribe(data: bytes, filename: str) -> str:
+    name = PurePath(filename).name
+    ext = PurePath(filename).suffix.lower()
+    if ext in SAME_CONTAINER:
+        ext = SAME_CONTAINER[ext]
+        name = PurePath(filename).stem + ext
+    if ext not in GROQ_FORMATS:
+        raise IngestError(
+            f"Speech-to-text cannot read '{ext}' files. Convert it to mp3, m4a, wav, mp4 or webm first."
+        )
+    if len(data) > SEND_LIMIT:
+        raise IngestError(
+            "This recording is over 24 MB, the most the speech-to-text service accepts in one file. "
+            "Compress or split it, then upload the parts."
+        )
     result = _groq().audio.transcriptions.create(
         file=(name, data), model=get_settings().groq_model_whisper, response_format="text"
     )
-    return (result if isinstance(result, str) else getattr(result, "text", "")).strip()
-
-
-def _split_with_ffmpeg(data: bytes, filename: str) -> list[tuple[str, bytes]]:
-    suffix = PurePath(filename).suffix or ".bin"
-    with tempfile.TemporaryDirectory() as tmp:
-        src = Path(tmp) / f"input{suffix}"
-        src.write_bytes(data)
-        pattern = str(Path(tmp) / "part_%03d.mp3")
-        proc = subprocess.run(
-            ["ffmpeg", "-nostdin", "-v", "error", "-i", str(src), "-vn", "-ac", "1", "-ar", "16000",
-             "-b:a", "32k", "-f", "segment", "-segment_time", str(SEGMENT_SECONDS), pattern],
-            capture_output=True, text=True, timeout=600,
-        )
-        if proc.returncode != 0:
-            raise IngestError(f"ffmpeg could not read the file: {proc.stderr.strip()[:200]}")
-        parts = sorted(Path(tmp).glob("part_*.mp3"))
-        if not parts:
-            raise IngestError("No audio track was found in the file")
-        return [(p.name, p.read_bytes()) for p in parts]
-
-
-def transcribe(data: bytes, filename: str) -> str:
-    ext = PurePath(filename).suffix.lower()
-    if shutil.which("ffmpeg"):
-        pieces = _split_with_ffmpeg(data, filename)
-    elif ext in AUDIO_EXT and len(data) <= DIRECT_LIMIT:
-        pieces = [(PurePath(filename).name, data)]
-    elif ext in AUDIO_EXT:
-        raise ToolMissing("ffmpeg is not installed, and this audio file is too large to send directly.")
-    else:
-        raise ToolMissing("ffmpeg is not installed, so video files cannot be processed.")
-    text = "\n\n".join(t for t in (_transcribe_piece(n, d) for n, d in pieces) if t)
-    if not text.strip():
+    text = (result if isinstance(result, str) else getattr(result, "text", "")).strip()
+    if not text:
         raise IngestError("No speech was detected in the recording")
     return text
