@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     cluster_join_similarity: float = 0.90
     cluster_new_similarity: float = 0.81
     cluster_agent_max_steps: int = 4
+
+    # An analysis run lives inside one request (300 s on Vercel), so it takes a batch of resources.
+    analyze_batch_size: int = 10
+    analyze_stale_minutes: int = 6  # a run with no end event after this long is treated as dead
     llm_max_wait_seconds: float = 20.0  # longest we wait for a provider's budget before skipping it
 
     # Local name-detection models for non-English text (blank disables a model).

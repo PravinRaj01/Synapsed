@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.ingestion import router as ingestion_router
+from app.api.runs import router as runs_router
 from app.core import database, name_models
 from app.core.config import get_settings
 
@@ -37,6 +38,7 @@ app.add_middleware(
 
 
 app.include_router(ingestion_router)
+app.include_router(runs_router)
 
 
 @app.exception_handler(Exception)

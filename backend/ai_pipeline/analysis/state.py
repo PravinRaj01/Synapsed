@@ -12,6 +12,7 @@ class RunState(TypedDict, total=False):
     user_id: str
     run_id: str
     only_resources: list[str] | None  # restrict the run to these resources (None = all unanalysed)
+    max_resources: int | None  # take at most this many resources in this run (None = the default cap)
     resource_ids: list[str]  # selected for this run
     extracted_resources: list[str]  # extracted successfully, including those with no items
     items: list[dict]  # verified items, each tagged with its resource and segment

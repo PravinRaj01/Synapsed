@@ -10,6 +10,7 @@ from pgvector import Vector
 from pydantic import BaseModel, Field
 
 from ai_pipeline.embedder import embed_texts
+from app.api.common import require_campaign as _require_campaign
 from app.core import storage
 from app.core.auth import AuthUser, current_user
 from app.core.config import get_settings
@@ -73,13 +74,6 @@ class ResearchResult(BaseModel):
     title: str
     resource: IngestedResource | None = None
     skipped: str | None = None
-
-
-def _require_campaign(user_id: UUID, campaign_id: UUID) -> None:
-    """404 unless the campaign exists and belongs to one of the user's workspaces (RLS)."""
-    with user_tx(user_id) as conn:
-        if not conn.execute("select 1 from campaigns where id = %s", (campaign_id,)).fetchone():
-            raise HTTPException(404, "Campaign not found")
 
 
 def _insert_resource(
