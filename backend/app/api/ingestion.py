@@ -38,6 +38,30 @@ class IngestResponse(BaseModel):
     duplicates: int
 
 
+UPLOAD_URL_SECONDS = 900
+
+
+class UploadRequest(BaseModel):
+    campaign_id: UUID
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(ge=1)
+
+
+class UploadTicket(BaseModel):
+    key: str  # send this back to /ingest/stored after the PUT
+    url: str  # PUT the raw file bytes here (no auth header, no multipart)
+    expires_in: int
+    max_bytes: int
+
+
+class StoredIngestRequest(BaseModel):
+    campaign_id: UUID
+    key: str = Field(min_length=1, max_length=600)
+    source_type: str | None = None
+    text_column: str | None = None
+    segment_column: str | None = None
+
+
 class ResearchRequest(BaseModel):
     campaign_id: UUID
     query: str = Field(min_length=3, max_length=200)
@@ -91,24 +115,11 @@ def _segment_ids(conn: psycopg.Connection, campaign_id: UUID) -> dict[str, UUID]
     return {r["name"].lower(): r["id"] for r in rows}
 
 
-@router.post("/ingest", response_model=IngestResponse)
-def ingest(
-    campaign_id: UUID = Form(...),
-    file: UploadFile = File(...),
-    source_type: str | None = Form(None),
-    text_column: str | None = Form(None),
-    segment_column: str | None = Form(None),
-    user: AuthUser = Depends(current_user),
+def _stage(
+    user: AuthUser, campaign_id: UUID, data: bytes, filename: str, key: str, source_type: str | None,
+    text_column: str | None, segment_column: str | None, *, already_stored: bool,
 ) -> IngestResponse:
-    """Parse, scrub and stage an uploaded file. Nothing is embedded until it is approved."""
-    max_bytes = get_settings().max_upload_mb * 1024 * 1024
-    _require_campaign(user.id, campaign_id)
-
-    data = file.file.read(max_bytes + 1)
-    if len(data) > max_bytes:
-        raise HTTPException(413, f"File is larger than {get_settings().max_upload_mb} MB")
-    filename = PurePath(file.filename or "upload").name
-
+    """Parse, scrub and stage a file's content; keep the file in storage unless nothing new came of it."""
     try:
         kind = parsers.detect_kind(filename)
         stype = resolve_source_type(kind, source_type)
@@ -119,10 +130,12 @@ def ingest(
     except ToolMissing as exc:
         raise HTTPException(503, str(exc)) from exc
     except IngestError as exc:
+        if already_stored:
+            storage.delete_object(key)  # the user cannot use this file as it is
         raise HTTPException(422, str(exc)) from exc
 
-    key = f"{campaign_id}/{uuid.uuid4().hex}/{filename}"
-    storage.upload_bytes(key, data, mimetypes.guess_type(filename)[0] or "application/octet-stream")
+    if not already_stored:
+        storage.upload_bytes(key, data, mimetypes.guess_type(filename)[0] or "application/octet-stream")
 
     results: list[IngestedResource] = []
     with user_tx(user.id) as conn:
@@ -139,6 +152,68 @@ def ingest(
     if duplicates == len(results):  # nothing new was stored, so drop the orphaned upload
         storage.delete_object(key)
     return IngestResponse(resources=results, duplicates=duplicates)
+
+
+@router.post("/ingest", response_model=IngestResponse)
+def ingest(
+    campaign_id: UUID = Form(...),
+    file: UploadFile = File(...),
+    source_type: str | None = Form(None),
+    text_column: str | None = Form(None),
+    segment_column: str | None = Form(None),
+    user: AuthUser = Depends(current_user),
+) -> IngestResponse:
+    """Parse, scrub and stage an uploaded file. Nothing is embedded until it is approved.
+
+    The body must fit the host's request limit (4.5 MB on Vercel); larger files use /uploads.
+    """
+    max_bytes = get_settings().max_upload_mb * 1024 * 1024
+    _require_campaign(user.id, campaign_id)
+
+    data = file.file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise HTTPException(413, f"File is larger than {get_settings().max_upload_mb} MB")
+    filename = PurePath(file.filename or "upload").name
+    key = f"{campaign_id}/{uuid.uuid4().hex}/{filename}"
+    return _stage(user, campaign_id, data, filename, key, source_type, text_column, segment_column,
+                  already_stored=False)
+
+
+@router.post("/uploads", response_model=UploadTicket)
+def create_upload(req: UploadRequest, user: AuthUser = Depends(current_user)) -> UploadTicket:
+    """Check a file before it is sent, and return a presigned URL the browser can PUT it to."""
+    max_bytes = get_settings().max_upload_mb * 1024 * 1024
+    _require_campaign(user.id, req.campaign_id)
+    filename = PurePath(req.filename).name
+    try:
+        parsers.detect_kind(filename)
+    except IngestError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if req.size > max_bytes:
+        raise HTTPException(413, f"File is larger than {get_settings().max_upload_mb} MB")
+    key = f"{req.campaign_id}/{uuid.uuid4().hex}/{filename}"
+    return UploadTicket(
+        key=key, url=storage.presigned_url(key, UPLOAD_URL_SECONDS, "put_object"),
+        expires_in=UPLOAD_URL_SECONDS, max_bytes=max_bytes,
+    )
+
+
+@router.post("/ingest/stored", response_model=IngestResponse)
+def ingest_stored(req: StoredIngestRequest, user: AuthUser = Depends(current_user)) -> IngestResponse:
+    """Stage a file the browser already uploaded to the key from /uploads."""
+    max_bytes = get_settings().max_upload_mb * 1024 * 1024
+    _require_campaign(user.id, req.campaign_id)
+    if not req.key.startswith(f"{req.campaign_id}/") or ".." in req.key:
+        raise HTTPException(403, "That upload does not belong to this campaign")
+    size = storage.object_size(req.key)
+    if size is None:
+        raise HTTPException(404, "No uploaded file found for that key. Upload it first.")
+    if size > max_bytes:
+        storage.delete_object(req.key)
+        raise HTTPException(413, f"File is larger than {get_settings().max_upload_mb} MB")
+    filename = PurePath(req.key).name
+    return _stage(user, req.campaign_id, storage.download_bytes(req.key), filename, req.key,
+                  req.source_type, req.text_column, req.segment_column, already_stored=True)
 
 
 @router.get("/resources")

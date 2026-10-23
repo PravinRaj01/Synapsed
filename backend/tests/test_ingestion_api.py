@@ -229,3 +229,85 @@ def test_malay_names_are_scrubbed_when_a_name_model_is_available(client, campaig
     row = fetch(who, "select content, pii_note from resources where id = %s", res["id"])[0]
     assert "<PERSON>" in row["content"] and "Pertama sekali" in row["content"]
     assert row["pii_note"] == res["pii_notice"]
+
+
+@pytest.fixture
+def bucket(client, monkeypatch):
+    """An in-memory stand-in for the storage bucket."""
+    objects: dict[str, bytes] = {}
+    monkeypatch.setattr(api.storage, "presigned_url", lambda key, expires, method: f"https://s3.test/{method}/{key}")
+    monkeypatch.setattr(api.storage, "object_size", lambda key: len(objects[key]) if key in objects else None)
+    monkeypatch.setattr(api.storage, "download_bytes", lambda key: objects[key])
+    monkeypatch.setattr(api.storage, "delete_object", lambda key: (objects.pop(key, None), client.deletes.append(key)))
+    return objects
+
+
+def ask_for_upload(client, campaign_id, name="notes.txt", size=1000):
+    return client.post("/api/v1/uploads", json={"campaign_id": str(campaign_id), "filename": name, "size": size})
+
+
+def test_upload_ticket_has_a_put_url_under_the_campaign_prefix(client, campaign, bucket):
+    r = ask_for_upload(client, campaign.id, "../../Interview 1.txt")
+    assert r.status_code == 200, r.text
+    ticket = r.json()
+    assert ticket["key"].startswith(f"{campaign.id}/") and ticket["key"].endswith("/Interview 1.txt")
+    assert ticket["url"] == f"https://s3.test/put_object/{ticket['key']}"
+    assert ticket["expires_in"] == 900 and ticket["max_bytes"] == get_settings().max_upload_mb * 1024 * 1024
+
+
+def test_upload_ticket_checks_campaign_type_and_size(client, campaign, monkeypatch, bucket):
+    assert ask_for_upload(client, uuid4()).status_code == 404
+    assert ask_for_upload(client, campaign.id, "archive.zip").status_code == 422
+    monkeypatch.setattr(api, "get_settings", lambda: Settings(max_upload_mb=1))
+    assert ask_for_upload(client, campaign.id, size=2 * 1024 * 1024).status_code == 413
+
+
+def ingest_stored(client, campaign_id, key, **extra):
+    return client.post("/api/v1/ingest/stored", json={"campaign_id": str(campaign_id), "key": key, **extra})
+
+
+def test_stored_upload_is_scrubbed_and_staged_without_a_second_copy(client, campaign, who, bucket):
+    key = ask_for_upload(client, campaign.id).json()["key"]
+    bucket[key] = NOTE.encode()
+    r = ingest_stored(client, campaign.id, key)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["duplicates"] == 0 and body["resources"][0]["redactions"]
+    row = fetch(who, "select content, storage_path from resources where id = %s", body["resources"][0]["id"])[0]
+    assert "sarah@acme.io" not in row["content"] and row["storage_path"] == key
+    assert client.uploads == [] and client.deletes == [] and key in bucket
+
+
+def test_a_key_from_another_campaign_is_refused(client, campaign, bucket):
+    other = f"{uuid4()}/abc/notes.txt"
+    bucket[other] = NOTE.encode()
+    assert ingest_stored(client, campaign.id, other).status_code == 403
+    assert ingest_stored(client, campaign.id, f"{campaign.id}/../{uuid4()}/x.txt").status_code == 403
+    assert other in bucket
+
+
+def test_a_key_that_was_never_uploaded_is_a_404(client, campaign, bucket):
+    assert ingest_stored(client, campaign.id, f"{campaign.id}/abc/notes.txt").status_code == 404
+
+
+def test_an_oversized_stored_object_is_refused_and_removed(client, campaign, monkeypatch, bucket):
+    monkeypatch.setattr(api, "get_settings", lambda: Settings(max_upload_mb=1))
+    key = f"{campaign.id}/abc/big.txt"
+    bucket[key] = b"x" * (1024 * 1024 + 1)
+    assert ingest_stored(client, campaign.id, key).status_code == 413
+    assert key not in bucket
+
+
+def test_an_unreadable_stored_file_is_removed(client, campaign, bucket):
+    key = f"{campaign.id}/abc/empty.txt"
+    bucket[key] = b"   \n  "
+    assert ingest_stored(client, campaign.id, key).status_code == 422
+    assert key not in bucket
+
+
+def test_a_duplicate_stored_upload_is_dropped(client, campaign, bucket):
+    first, second = f"{campaign.id}/a/one.txt", f"{campaign.id}/b/two.txt"
+    bucket[first] = bucket[second] = NOTE.encode()
+    assert ingest_stored(client, campaign.id, first).json()["duplicates"] == 0
+    assert ingest_stored(client, campaign.id, second).json()["duplicates"] == 1
+    assert first in bucket and second not in bucket
