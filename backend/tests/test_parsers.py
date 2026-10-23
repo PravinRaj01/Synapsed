@@ -1,6 +1,6 @@
 import io
 import json
-import shutil
+from types import SimpleNamespace
 
 import pytest
 from openpyxl import Workbook
@@ -128,12 +128,36 @@ def test_table_needs_data_rows():
 
 
 def test_image_ocr_requires_tesseract(monkeypatch):
-    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    monkeypatch.setattr(parsers, "find_tesseract", lambda: None)
     with pytest.raises(ToolMissing):
         parsers.parse_image(b"irrelevant")
 
 
-@pytest.mark.skipif(not shutil.which("tesseract"), reason="Tesseract is not installed")
+def test_find_tesseract_prefers_the_configured_path(monkeypatch, tmp_path):
+    fake = tmp_path / "tesseract.exe"
+    fake.write_text("")
+    monkeypatch.setattr(parsers, "get_settings", lambda: SimpleNamespace(tesseract_cmd=str(fake)))
+    assert parsers.find_tesseract() == str(fake)
+
+
+def test_find_tesseract_falls_back_to_the_windows_install_folder(monkeypatch, tmp_path):
+    fake = tmp_path / "tesseract.exe"
+    fake.write_text("")
+    monkeypatch.setattr(parsers, "get_settings", lambda: SimpleNamespace(tesseract_cmd=""))
+    monkeypatch.setattr(parsers.shutil, "which", lambda _n: None)  # not on PATH
+    monkeypatch.setattr(parsers, "_WINDOWS_TESSERACT", str(fake))
+    assert parsers.find_tesseract() == str(fake)
+    monkeypatch.setattr(parsers, "_WINDOWS_TESSERACT", str(tmp_path / "missing.exe"))
+    assert parsers.find_tesseract() is None
+
+
+def test_ocr_languages_use_only_installed_packs():
+    assert parsers.ocr_languages(["eng", "osd"]) == "eng"
+    assert parsers.ocr_languages(["tam", "eng", "msa", "osd"]) == "eng+msa+tam"
+    assert parsers.ocr_languages(["osd"]) == "eng"  # always a valid default
+
+
+@pytest.mark.skipif(parsers.find_tesseract() is None, reason="Tesseract is not installed")
 def test_image_ocr_reads_text():
     from PIL import Image, ImageDraw, ImageFont
 
