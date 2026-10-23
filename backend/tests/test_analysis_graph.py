@@ -61,10 +61,20 @@ REPLIES = {
 
 class FakeLlm:
     def __init__(self, fail_on=()):
-        self.calls, self.fail_on = [], fail_on
+        self.calls, self.fail_on, self.theme_calls = [], fail_on, 0
 
     def __call__(self, messages, language):
         text = messages[-1]["content"]
+        if messages[0]["content"].startswith("You name themes"):  # theme naming: one call for all new themes
+            self.theme_calls += 1
+            themes = json.loads(text)["themes"]
+            return Completion(json.dumps({"themes": [
+                {"id": t["id"], "label": f"Theme: {t['pain_points'][0][:30]}", "description": "Customers struggle here."} for t in themes
+            ]}), "gemini", "flash-lite", 200, 60, 700)
+        if messages[0]["content"].startswith("You estimate how easy"):  # roadmap ease
+            self.theme_calls += 1
+            return Completion(json.dumps({"items": [{"id": t["id"], "ease": 7} for t in json.loads(text)["themes"]]}),
+                              "gemini", "flash-lite", 200, 40, 600)
         self.calls.append(language)
         for needle in self.fail_on:
             if needle in text:
@@ -86,9 +96,14 @@ class Recorder:
         return [s for n, s, _ in self.events if n == node]
 
 
-def deps(llm=None, embed=None):
+def no_agent(messages, tools):
+    raise AssertionError("the grey-zone agent should not be needed here")
+
+
+def deps(llm=None, embed=None, llm_tools=None):
     rec = Recorder()
-    return Deps(llm=llm or FakeLlm(), embed=embed or (lambda texts: [UNIT for _ in texts]), trace=rec), rec
+    return Deps(llm=llm or FakeLlm(), embed=embed or (lambda texts: [UNIT for _ in texts]), trace=rec,
+                llm_tools=llm_tools or no_agent), rec
 
 
 @pytest.fixture
@@ -252,6 +267,8 @@ def test_db_trace_persists_events_for_the_laboratory(world):
     assert [(r["node"], r["status"]) for r in rows] == [
         ("select", "running"), ("select", "done"), ("extract", "running"), ("extract", "done"),
         ("extract", "done"), ("embed", "running"), ("embed", "done"),
+        ("cluster", "running"), ("cluster", "done"), ("name_themes", "running"), ("name_themes", "done"),
+        ("score", "running"), ("score", "done"), ("roadmap", "running"), ("roadmap", "done"),
     ]
     call = next(r for r in rows if r["model_used"])
     assert call["tokens"] == 520 and call["prompt"].startswith("TEXT:")
@@ -283,3 +300,131 @@ def test_chunk_choice_prefers_a_chunk_holding_the_whole_quote_then_the_one_cover
     assert _chunk_for(chunks, 90, 190) == "b"  # nothing holds it all: b covers 90 of its 100 characters, a only 10
     assert _chunk_for(chunks, 300, 320) is None
     assert _chunk_for([], 0, 10) is None
+
+
+# ---------------------------------------------------------------- themes, scoring and roadmap
+
+def vector_at(angle_degrees, axis=0):
+    """A unit vector in the plane of `axis` and axis+1: the cosine between two of these is cos(angle difference)."""
+    import math
+
+    v = [0.0] * 768
+    v[axis], v[axis + 1] = math.cos(math.radians(angle_degrees)), math.sin(math.radians(angle_degrees))
+    return v
+
+
+PAIN_VECTORS = {
+    "Monthly reports need manual CSV merging": vector_at(0),
+    "Export times out on large accounts": vector_at(18.2),  # 0.95 from the first: joins by threshold
+    "Export fails on large accounts": vector_at(50),  # 0.85 from the nearest: the grey zone
+    "New staff struggle to learn the metrics": vector_at(0, axis=4),  # unrelated: a new theme
+}
+
+
+def embed_by_text(texts):
+    return [PAIN_VECTORS[t] for t in texts]
+
+
+def themes_of(world):
+    return {r["summary_text"]: r["theme_id"] for r in q(world.user, "select summary_text, theme_id from insights")}
+
+
+def join_first_candidate(messages, tools):
+    """A scripted agent that joins the first candidate it is shown."""
+    from ai_pipeline.providers import ToolCall
+
+    shown = json.loads(messages[1]["content"])
+    args = {"theme_id": shown["candidates"][0]["theme_id"]}
+    return Completion("", "gemini", "flash-lite", 150, 25, 800, tool_calls=[ToolCall("c1", "append_pain_point", args, json.dumps(args))])
+
+
+def test_run_creates_one_named_theme_with_scores_and_a_roadmap_item(world):
+    world.resource(INTERVIEW, segment=world.segment)
+    llm = FakeLlm()
+    state = run_analysis(world.user, world.campaign, deps=deps(llm=llm)[0])
+
+    assert state["errors"] == [] and state["themed_insights"] == 2 and state["cluster_methods"] == {"threshold": 2}
+    themes = q(world.user, "select * from themes")
+    assert len(themes) == 1
+    theme = themes[0]
+    assert theme["label"] == "Theme: Monthly reports need manual CS" and theme["description"] == "Customers struggle here."
+    assert theme["frequency"] == 2 and float(theme["business_impact"]) == 100.0  # the only theme is the strongest
+    assert {r["theme_id"] for r in q(world.user, "select theme_id from insights")} == {theme["id"]}
+    item = q(world.user, "select * from roadmap_items")[0]
+    # impact 10; confidence 4 = 0.8 (one source) + 0.6 (two mentions) + 3.0 (identical vectors); ease 7 from the model
+    assert (item["theme_id"], item["horizon"], item["impact_score"], item["confidence_score"], item["ease_score"]) == (
+        theme["id"], "now", 10, 4, 7)
+    assert item["ice_score"] == 280 and item["title"] == theme["label"]
+    assert llm.theme_calls == 2  # one naming call and one ease call, however many themes
+
+
+def test_grey_zone_goes_to_the_agent_and_unrelated_pain_goes_to_a_new_theme(world):
+    world.resource(INTERVIEW, segment=world.segment)
+    world.resource(MALAY, language="id")
+    d, rec = deps(embed=embed_by_text, llm_tools=join_first_candidate)
+    state = run_analysis(world.user, world.campaign, deps=d)
+
+    assert state["errors"] == [] and state["cluster_methods"] == {"threshold": 3, "agent": 1}
+    theme_of = themes_of(world)
+    assert theme_of["Export fails on large accounts"] == theme_of["Export times out on large accounts"]  # the agent joined it
+    assert theme_of["New staff struggle to learn the metrics"] != theme_of["Monthly reports need manual CSV merging"]
+    assert len(q(world.user, "select id from themes")) == 2
+    decide = [details for n, s, details in rec.events if n == "decide"]
+    assert len(decide) == 1 and decide[0]["output"]["tool"] == "append_pain_point" and decide[0]["tokens"] == 175
+    clustering_calls = q(world.user, "select tokens_processed from telemetry_logs where action_type = 'clustering'")
+    assert len(clustering_calls) == 1 and clustering_calls[0]["tokens_processed"] == 175
+    impacts = sorted(float(r["business_impact"]) for r in q(world.user, "select business_impact from themes"))
+    assert impacts[-1] == 100.0 and impacts[0] < 100.0  # the enterprise-weighted theme outranks the other
+
+
+def test_when_no_provider_answers_the_grey_zone_still_gets_a_decision(world):
+    world.resource(INTERVIEW, segment=world.segment)
+    world.resource(MALAY, language="id")
+
+    def down(messages, tools):
+        raise AllProvidersFailed(["gemini: HTTP 429", "groq-fast: HTTP 503"])
+
+    d, rec = deps(embed=embed_by_text, llm_tools=down)
+    state = run_analysis(world.user, world.campaign, deps=d)
+    assert state["errors"] == [] and state["cluster_methods"] == {"threshold": 3, "fallback": 1}
+    theme_of = themes_of(world)
+    assert theme_of["Export fails on large accounts"] != theme_of["Export times out on large accounts"]  # 0.85 is below the midpoint
+    assert any(n == "decide" and s == "error" for n, s, _ in rec.events)
+
+
+def test_naming_failure_keeps_a_readable_label_and_the_run_completes(world):
+    world.resource(INTERVIEW)
+    base = FakeLlm()
+
+    def llm(messages, language):
+        if messages[0]["content"].startswith(("You name themes", "You estimate")):
+            raise AllProvidersFailed(["gemini: HTTP 429"])
+        return base(messages, language)
+
+    state = run_analysis(world.user, world.campaign, deps=deps(llm=llm)[0])
+    assert state["errors"] == []
+    assert q(world.user, "select label from themes")[0]["label"] == "Monthly reports need manual CSV merging"
+    assert q(world.user, "select ease_score from roadmap_items")[0]["ease_score"] == 5  # the default estimate
+
+
+def test_a_later_run_adds_to_existing_themes_and_keeps_the_pms_card_where_it_is(world):
+    world.resource(INTERVIEW, segment=world.segment)
+    run_analysis(world.user, world.campaign, deps=deps()[0])
+    with database.user_tx(world.user) as conn:  # the PM drags the card and edits the ease
+        conn.execute("update roadmap_items set horizon = 'later', ease_score = 2")
+
+    world.resource(MALAY, language="id")
+    state = run_analysis(world.user, world.campaign, deps=deps()[0])
+    assert state["errors"] == [] and state["cluster_methods"] == {"threshold": 2}  # same unit vector: both join
+    assert len(q(world.user, "select id from themes")) == 1
+    assert q(world.user, "select frequency from themes")[0]["frequency"] == 4
+    items = q(world.user, "select horizon, ease_score from roadmap_items")
+    assert len(items) == 1 and items[0]["horizon"] == "later" and items[0]["ease_score"] == 2
+
+
+def test_a_run_with_nothing_new_stops_before_clustering(world):
+    world.resource(INTERVIEW)
+    run_analysis(world.user, world.campaign, deps=deps()[0])
+    d, rec = deps()
+    state = run_analysis(world.user, world.campaign, deps=d)
+    assert state["resource_ids"] == [] and not rec.statuses("cluster")

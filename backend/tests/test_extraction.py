@@ -182,6 +182,8 @@ def test_the_graph_has_the_planned_shape_and_exports_its_branches():
 
     mermaid = build_graph().get_graph().draw_mermaid()
     edges = {line.strip() for line in mermaid.splitlines() if ">" in line}
-    # dotted arrows are the conditional edges: stop early when there is nothing to analyse
+    # dotted arrows are the conditional edges: stop early when there is nothing to analyse or place
     assert {"__start__ --> select;", "select -.-> extract;", "select -.-> __end__;",
-            "extract --> embed;", "embed --> __end__;"} <= edges
+            "extract --> embed;", "embed -.-> cluster;", "embed -.-> __end__;",
+            "cluster --> name_themes;", "name_themes --> score;", "score --> roadmap;",
+            "roadmap --> __end__;"} <= edges

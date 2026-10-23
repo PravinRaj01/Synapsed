@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # Provider order per language group; names are groq-fast, gemini, sealion.
     llm_chain_en: str = "groq-fast,gemini,sealion"
     llm_chain_other: str = "gemini,sealion,groq-fast"
+    # Clustering: a pain point at or above the join similarity joins its nearest theme, below the new
+    # similarity it starts one, in between an LLM agent decides. Gemini embeddings are compressed
+    # (unrelated pain points still score 0.71-0.82), so these are higher than a naive 0.70 / 0.85.
+    cluster_join_similarity: float = 0.90
+    cluster_new_similarity: float = 0.81
+    cluster_agent_max_steps: int = 4
     llm_max_wait_seconds: float = 20.0  # longest we wait for a provider's budget before skipping it
 
     # Local name-detection models for non-English text (blank disables a model).

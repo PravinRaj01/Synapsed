@@ -199,3 +199,59 @@ def test_parse_json_reply(text, expected):
 def test_parse_json_reply_rejects_garbage(text):
     with pytest.raises(ValueError):
         p.parse_json_reply(text)
+
+
+TOOLS = [{"type": "function", "function": {"name": "create_new_theme", "parameters": {"type": "object"}}}]
+
+
+def tool_reply(*calls, text=""):
+    message = {"content": text or None, "tool_calls": [
+        {"id": cid, "type": "function", "function": {"name": name, "arguments": args}} for cid, name, args in calls
+    ]}
+    body = {"choices": [{"message": message, "finish_reason": "tool_calls"}],
+            "usage": {"prompt_tokens": 80, "completion_tokens": 15, "total_tokens": 95}}
+    return httpx.Response(200, json=body)
+
+
+def test_tools_are_sent_and_tool_calls_are_returned(net):
+    fake = net({"groq": [tool_reply(("c1", "create_new_theme", '{"label": "Slow export"}'))]})
+    result = p.complete(MESSAGES, ["groq-fast"], settings=settings(), tools=TOOLS)
+    body = fake.calls[0][1]
+    assert body["tools"] == TOOLS and body["tool_choice"] == "auto"
+    assert result.text == "" and len(result.tool_calls) == 1
+    call = result.tool_calls[0]
+    assert (call.id, call.name, call.arguments) == ("c1", "create_new_theme", {"label": "Slow export"})
+
+
+def test_bad_tool_arguments_become_an_empty_dict_but_keep_the_raw_text(net):
+    net({"groq": [tool_reply(("c1", "create_new_theme", "{not json"), ("c2", "create_new_theme", "[1, 2]"))]})
+    calls = p.complete(MESSAGES, ["groq-fast"], settings=settings(), tools=TOOLS).tool_calls
+    assert [c.arguments for c in calls] == [{}, {}] and calls[0].raw_arguments == "{not json"
+
+
+def test_gemini_json_mode_is_not_sent_together_with_tools(net):
+    fake = net({"googleapis": [tool_reply(("c1", "create_new_theme", "{}"))]})
+    p.complete(MESSAGES, ["gemini"], settings=settings(), tools=TOOLS)
+    assert "response_format" not in fake.calls[0][1] and "tools" in fake.calls[0][1]
+
+
+def test_no_tools_means_no_tool_fields(net):
+    fake = net({"groq": [reply("ok")]})
+    p.complete(MESSAGES, ["groq-fast"], settings=settings())
+    assert "tools" not in fake.calls[0][1] and "tool_choice" not in fake.calls[0][1]
+
+
+def test_a_reply_with_neither_text_nor_tool_calls_still_falls_through(net):
+    fake = net({"groq": [reply("")], "googleapis": [reply("ok")]})
+    assert p.complete(MESSAGES, ["groq-fast", "gemini"], settings=settings(), tools=TOOLS).provider == "gemini"
+    assert len(fake.calls) == 2
+
+
+def test_tool_conversation_messages_can_be_estimated(net):
+    history = MESSAGES + [
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "c1", "type": "function",
+                                                             "function": {"name": "x", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "c1", "content": "[]"},
+    ]
+    net({"groq": [reply("done")]})
+    assert p.complete(history, ["groq-fast"], settings=settings(), tools=TOOLS).text == "done"

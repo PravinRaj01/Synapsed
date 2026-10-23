@@ -36,6 +36,14 @@ class AllProvidersFailed(Exception):
 
 
 @dataclass
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict  # {} when the model sent arguments that are not a JSON object
+    raw_arguments: str = ""
+
+
+@dataclass
 class Completion:
     text: str
     provider: str
@@ -44,6 +52,7 @@ class Completion:
     completion_tokens: int
     latency_ms: int
     failed_before: list[str] = field(default_factory=list)  # e.g. ["groq-fast: HTTP 429"]
+    tool_calls: list[ToolCall] = field(default_factory=list)  # set when the model chose to call tools
 
     @property
     def total_tokens(self) -> int:
@@ -151,7 +160,7 @@ def chain_for(language: str | None, settings: Settings | None = None) -> list[st
 
 
 def _estimate_tokens(messages: list[dict], max_tokens: int) -> int:
-    chars = sum(len(m["content"]) for m in messages)
+    chars = sum(len(m.get("content") or "") + len(json.dumps(m.get("tool_calls") or "")) for m in messages)
     return chars // 3 + min(max_tokens, COMPLETION_TOKEN_GUESS)
 
 
@@ -161,7 +170,26 @@ def _post(url: str, body: dict, api_key: str) -> httpx.Response:
     )
 
 
-def _call(provider: Provider, messages: list[dict], max_tokens: int, json_mode: bool, max_wait: float) -> Completion:
+def _parse_tool_calls(raw_calls: list[dict]) -> list[ToolCall]:
+    calls = []
+    for index, raw in enumerate(raw_calls):
+        function = raw.get("function") or {}
+        raw_arguments = function.get("arguments") or ""
+        try:
+            arguments = json.loads(raw_arguments) if raw_arguments else {}
+        except json.JSONDecodeError:
+            arguments = {}
+        calls.append(ToolCall(
+            raw.get("id") or f"call_{index}", function.get("name") or "",
+            arguments if isinstance(arguments, dict) else {}, raw_arguments,
+        ))
+    return calls
+
+
+def _call(
+    provider: Provider, messages: list[dict], max_tokens: int, json_mode: bool, max_wait: float,
+    tools: list[dict] | None = None,
+) -> Completion:
     now = time.monotonic()
     if provider.cooldown_until > now:
         raise ProviderUnavailable(f"cooling down for {provider.cooldown_until - now:.0f}s after a 429")
@@ -173,7 +201,10 @@ def _call(provider: Provider, messages: list[dict], max_tokens: int, json_mode: 
         time.sleep(wait)
 
     body = {"model": provider.model, "messages": messages, "max_tokens": max_tokens, **provider.extra_body}
-    if json_mode and provider.name == "gemini":
+    if tools:
+        body["tools"] = tools
+        body["tool_choice"] = "auto"
+    if json_mode and not tools and provider.name == "gemini":
         body["response_format"] = {"type": "json_object"}  # without it Flash-Lite often answers with an empty list
     provider.budget.record(estimate)
     started = time.monotonic()
@@ -193,22 +224,28 @@ def _call(provider: Provider, messages: list[dict], max_tokens: int, json_mode: 
     data = response.json()
     choice = data["choices"][0]
     text = (choice["message"].get("content") or "").strip()
+    tool_calls = _parse_tool_calls(choice["message"].get("tool_calls") or [])
     usage = data.get("usage") or {}
     prompt_tokens, completion_tokens = usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
     if usage.get("total_tokens"):
         provider.budget.settle(estimate, usage["total_tokens"])
-    if not text:
+    if not text and not tool_calls:
         raise ProviderUnavailable(f"empty reply (finish: {choice.get('finish_reason')})")
     if choice.get("finish_reason") == "length":
         raise ProviderUnavailable("reply was cut off at max_tokens")
-    return Completion(text, provider.name, provider.model, prompt_tokens, completion_tokens, latency_ms)
+    return Completion(
+        text, provider.name, provider.model, prompt_tokens, completion_tokens, latency_ms, tool_calls=tool_calls
+    )
 
 
 def complete(
     messages: list[dict], chain: list[str], *, max_tokens: int = 1500, json_mode: bool = True,
-    settings: Settings | None = None,
+    settings: Settings | None = None, tools: list[dict] | None = None,
 ) -> Completion:
-    """Run the request down the chain and return the first usable answer."""
+    """Run the request down the chain and return the first usable answer.
+
+    With `tools` (OpenAI function schemas) the reply may carry `tool_calls` instead of text.
+    """
     settings = settings or get_settings()
     providers = get_providers()
     failures: list[str] = []
@@ -218,7 +255,7 @@ def complete(
             failures.append(f"{name}: not configured")
             continue
         try:
-            result = _call(provider, messages, max_tokens, json_mode, settings.llm_max_wait_seconds)
+            result = _call(provider, messages, max_tokens, json_mode, settings.llm_max_wait_seconds, tools)
         except ProviderUnavailable as exc:
             logger.warning("LLM provider %s failed: %s", name, exc)
             failures.append(f"{name}: {exc}")
