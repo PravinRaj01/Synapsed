@@ -1,7 +1,9 @@
 import mimetypes
 import uuid
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import PurePath
+from typing import Literal
 from uuid import UUID
 
 import psycopg
@@ -229,7 +231,36 @@ def ingest_stored(req: StoredIngestRequest, user: AuthUser = Depends(limited("in
                   default_segment=req.segment_id)
 
 
-@router.get("/resources")
+class ResourceListItem(BaseModel):
+    id: UUID
+    title: str
+    source_type: str
+    source_url: str | None
+    language: str | None
+    status: Literal["staged", "approved", "rejected"]
+    pii_redacted: bool
+    pii_note: str | None
+    summary: str | None
+    created_at: datetime
+    chars: int
+    segment_id: UUID | None
+    segment: str | None
+    analyzed_at: datetime | None
+    chunk_count: int
+
+
+class ApprovedOut(BaseModel):
+    id: UUID
+    status: Literal["approved"]
+    chunks: int
+
+
+class RejectedOut(BaseModel):
+    id: UUID
+    status: Literal["rejected"]
+
+
+@router.get("/resources", response_model=list[ResourceListItem])
 def list_resources(campaign_id: UUID, status: str | None = None, user: AuthUser = Depends(current_user)):
     with user_tx(user.id) as conn:
         return conn.execute(
@@ -244,7 +275,7 @@ def list_resources(campaign_id: UUID, status: str | None = None, user: AuthUser 
         ).fetchall()
 
 
-@router.post("/resources/{resource_id}/approve")
+@router.post("/resources/{resource_id}/approve", response_model=ApprovedOut)
 def approve_resource(resource_id: UUID, user: AuthUser = Depends(limited("approve"))):
     """Chunk and embed a staged resource, then mark it approved so agents and chat can use it."""
     with user_tx(user.id) as conn:
@@ -276,7 +307,7 @@ def approve_resource(resource_id: UUID, user: AuthUser = Depends(limited("approv
     return {"id": resource_id, "status": "approved", "chunks": len(chunks)}
 
 
-@router.post("/resources/{resource_id}/reject")
+@router.post("/resources/{resource_id}/reject", response_model=RejectedOut)
 def reject_resource(resource_id: UUID, user: AuthUser = Depends(current_user)):
     with user_tx(user.id) as conn:
         row = conn.execute(
