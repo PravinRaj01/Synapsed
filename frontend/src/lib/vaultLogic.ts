@@ -151,7 +151,7 @@ export function shouldContinue(last: RunSummary, batchesDone: number): boolean {
 
 // ---------------------------------------------------------------- highlighting quotes in a source
 
-export type Highlight = { start_offset: number; end_offset: number; color?: string | null; theme?: string | null; insight?: string }
+export type Highlight = { start_offset: number; end_offset: number; color?: string | null; theme?: string | null; insight?: string; /** the one quote being looked at */ focus?: boolean }
 export type Piece = { text: string; highlight?: Highlight }
 
 /**

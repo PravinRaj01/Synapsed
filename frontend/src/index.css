@@ -111,3 +111,19 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* The quote a footnote points at: a bold emerald underline and a pulse of background, so the eye lands on it. */
+@keyframes focus-flash {
+  0%,
+  60% {
+    background: color-mix(in srgb, var(--accent-from) 55%, transparent);
+  }
+  100% {
+    background: color-mix(in srgb, var(--accent-from) 22%, transparent);
+  }
+}
+.focus-flash {
+  background: color-mix(in srgb, var(--accent-from) 22%, transparent);
+  box-shadow: inset 0 -3px 0 var(--accent-from);
+  animation: focus-flash 1.6s ease-out;
+}
