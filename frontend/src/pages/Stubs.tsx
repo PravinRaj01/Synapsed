@@ -1,4 +1,4 @@
-import { BookOpenCheck, FileText, Lightbulb, Sparkles } from 'lucide-react'
+import { FileText, Lightbulb, Sparkles } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/Card'
@@ -10,15 +10,6 @@ function Soon({ icon, title, children }: { icon: ReactNode; title: string; child
       <h2 className="text-lg font-semibold">{title}</h2>
       <p className="max-w-md text-sm text-muted">{children}</p>
     </Card>
-  )
-}
-
-export function VaultStub() {
-  return (
-    <>
-      <PageHeader title="Knowledge Vault" subtitle="Upload, review and approve the sources your analysis is built on." />
-      <Soon icon={<BookOpenCheck className="size-6" />} title="Coming soon">Uploads, the staging preview and the pain points explorer land here.</Soon>
-    </>
   )
 }
 

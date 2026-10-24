@@ -1,0 +1,4 @@
+Interviewer: How does month-end close go with the product today?
+Participant (finance lead, enterprise customer): It takes us three days. The bank matching suggestions are wrong about half the time, so my team matches most transactions by hand and I keep a spreadsheet of what is unmatched. Every month I export the ledger report to CSV and it times out for our biggest entity, so I split it by quarter and stitch the files together, which wastes an afternoon.
+Interviewer: Anything else?
+Participant: Invoice approvals are a black box. Nobody can tell who an invoice is waiting on, so I chase approvers by email. The invoice template looks great though, our customers say it looks very professional.
