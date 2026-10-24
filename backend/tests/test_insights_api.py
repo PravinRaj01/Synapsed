@@ -103,6 +103,18 @@ def test_the_model_can_say_a_request_cannot_be_charted():
         ch.spec_from_prompt("revenue by month", [], [], scripted(json.dumps({"error": "There is no revenue data."})))
 
 
+def test_a_filter_listing_every_segment_or_theme_is_dropped_but_a_real_one_is_kept():
+    reply = json.dumps({"x": "theme", "y": "impact", "filters": [
+        {"field": "segment", "values": ["enterprise", "Free"]}, {"field": "theme", "values": ["Slow export", "Onboarding"]},
+        {"field": "sentiment", "values": ["negative"]}]})
+    spec = ch.spec_from_prompt("themes by impact", ["Slow export", "Onboarding"], ["Enterprise", "Free"], scripted(reply))
+    assert [(f.field, f.values) for f in spec.filters] == [("sentiment", ["negative"])]
+    one = json.dumps({"x": "theme", "filters": [{"field": "segment", "values": ["enterprise"]}]})
+    assert ch.spec_from_prompt("q", [], ["Enterprise", "Free"], scripted(one)).filters[0].values == ["enterprise"]  # a genuine narrowing stays
+    no_names = json.dumps({"x": "theme", "filters": [{"field": "segment", "values": ["enterprise"]}]})
+    assert len(ch.spec_from_prompt("q", [], [], scripted(no_names)).filters) == 1  # nothing known to compare with: left alone
+
+
 def test_a_spec_with_an_error_key_but_real_fields_is_still_a_spec():
     spec = ch.spec_from_prompt("q", [], [], scripted(json.dumps({"x": "theme", "error": "none"})))
     assert spec.x == "theme"

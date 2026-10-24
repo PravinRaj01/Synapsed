@@ -17,7 +17,7 @@ SYSTEM_PROMPT = """You explain analysis results to a product manager in 2-3 plai
 You are given the results as JSON. Rules:
 - Use ONLY numbers that appear in the JSON. Do not calculate new percentages or totals. Do not add outside facts.
 - This is an ESTIMATE, not a fact: say so once, and mention the uncertainty (the interval, or the small amount of data) when it is given.
-- Name themes and segments by their labels.
+- Name themes and segments by their labels. In a what-if, "before" and "after" mean before and after the assumed change, not before and after any analysis.
 Reply with ONLY JSON: {"narrative": "<2-3 sentences>"}"""
 
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")

@@ -154,7 +154,7 @@ Reply with ONLY a JSON object, chosen from these fixed options (anything else is
 - "x": what to group by: "theme" | "segment" | "sentiment" | "use_case" | "kind" (pain_point or feature_request) | "severity" (1-5) | "source_type" | "language" | "week"
 - "y": what to measure: "insights" (count of pain points and requests) | "impact" (Business Impact: customer weight x severity) | "avg_severity" | "resources" (distinct sources)
 - "split_by": optional, same options as "x" but different from it; required for "stacked_bar"
-- "filters": optional list of {"field": theme|segment|sentiment|use_case|kind|severity|source_type|language, "values": [..]}; use the exact names listed below when the request names a theme or segment; sentiment is positive|neutral|negative
+- "filters": optional list of {"field": theme|segment|sentiment|use_case|kind|severity|source_type|language, "values": [..]}. Add a filter ONLY when the request asks for specific values (for example "Enterprise customers" or "negative"); never filter to "all" of something. Use the exact names listed below when the request names a theme or segment; sentiment is positive|neutral|negative
 - "limit": optional number of groups, 1-30
 - "title": a short chart title
 Use "week" with "line" for trends over time. Use "pie" only for shares of a whole. "Negative sentiment by segment as a stacked bar" means x=segment, split_by=sentiment, and you may filter sentiment if the request asks for only one.
@@ -179,6 +179,13 @@ def _problem(exc: Exception) -> str:
     return str(exc)[:150]
 
 
+def _without_filters_that_keep_everything(spec: ChartSpec, themes: list[str], segments: list[str]) -> ChartSpec:
+    """Drop a theme or segment filter that lists every known name: it removes nothing but unthemed or unsegmented rows."""
+    everything = {"theme": {t.lower() for t in themes}, "segment": {s.lower() for s in segments}}
+    spec.filters = [f for f in spec.filters if not (everything.get(f.field) and everything[f.field] <= set(f.values))]
+    return spec
+
+
 def spec_from_prompt(
     prompt: str, themes: list[str], segments: list[str], llm: Callable[[list[dict]], Completion],
     on_completion: Callable[[Completion], None] | None = None,
@@ -197,7 +204,7 @@ def spec_from_prompt(
             data = parse_json_reply(completion.text)
             if isinstance(data, dict) and isinstance(data.get("error"), str) and "x" not in data:
                 raise ChartRefused(data["error"][:200])
-            return ChartSpec.model_validate(data)
+            return _without_filters_that_keep_everything(ChartSpec.model_validate(data), themes, segments)
         except ChartRefused:
             raise
         except (ValueError, ValidationError) as exc:
