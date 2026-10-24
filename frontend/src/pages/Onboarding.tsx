@@ -92,7 +92,7 @@ export default function Onboarding() {
 
         {!isLoading && current === 'business' && (
           <section className="space-y-4" aria-label="Your business">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Company" error={errors.profile?.company?.message}>
                 <input className={inputClass} autoComplete="organization" placeholder="Acme Inc." {...register('profile.company')} />
               </Field>
@@ -128,8 +128,8 @@ export default function Onboarding() {
               </p>
               <ul className="space-y-2">
                 {segments.fields.map((field, i) => (
-                  <li key={field.id} className="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_9rem_5.5rem_auto]">
-                    <input aria-label={`Segment ${i + 1} name`} className={cn(inputClass, 'col-span-2 sm:col-span-1')} {...register(`campaign.segments.${i}.name`)} />
+                  <li key={field.id} className="grid grid-cols-[1fr_5.5rem_auto] gap-2 sm:grid-cols-[1fr_9rem_5.5rem_auto]">
+                    <input aria-label={`Segment ${i + 1} name`} className={cn(inputClass, 'col-span-3 sm:col-span-1')} {...register(`campaign.segments.${i}.name`)} />
                     <select aria-label={`Segment ${i + 1} type`} className={inputClass} {...register(`campaign.segments.${i}.tier`)}>
                       {TIERS.map((t) => (
                         <option key={t.value} value={t.value}>
@@ -179,7 +179,7 @@ export default function Onboarding() {
         {!isLoading && current === 'data' && (
           <section aria-label="Your data">
             <p className="mb-4 text-sm text-muted">How would you like to start?</p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <button
                 type="button"
                 disabled={create.isPending}

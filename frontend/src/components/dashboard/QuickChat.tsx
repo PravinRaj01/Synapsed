@@ -28,7 +28,9 @@ export function QuickChat({ campaignId, disabled }: { campaignId: string | null 
       unwrap(api.POST('/api/v1/chat', { body: { campaign_id: campaignId!, question: q.text, history: q.history } })),
   })
 
-  useEffect(() => endRef.current?.scrollIntoView?.({ block: 'end' }), [messages, ask.isPending])
+  useEffect(() => {
+    endRef.current?.scrollIntoView?.({ block: 'end' }) // an effect must return nothing or a clean-up function, so no arrow shorthand
+  }, [messages, ask.isPending])
 
   async function send(text: string) {
     const trimmed = text.trim()

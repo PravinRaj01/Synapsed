@@ -47,7 +47,7 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-    <Toaster position="bottom-right" theme={theme} richColors closeButton />
+    <Toaster position="bottom-center" theme={theme} richColors closeButton />
     </>
   )
 }

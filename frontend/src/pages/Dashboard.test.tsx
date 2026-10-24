@@ -231,6 +231,24 @@ describe('quick chat', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Try again in 30 seconds.')
   })
 
+  it('keeps working in a browser, where scrolling the newest message into view returns a value', async () => {
+    // jsdom has no scrollIntoView; browsers do. An effect that returned its result crashed the whole page in Chrome.
+    const scroll = vi.fn(() => 'not-a-function')
+    Element.prototype.scrollIntoView = scroll as unknown as typeof Element.prototype.scrollIntoView
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const user = await openChat({ data: answer })
+      await user.type(await screen.findByLabelText('Your question'), 'What breaks for big accounts?')
+      await user.click(screen.getByRole('button', { name: 'Send' }))
+      expect(await screen.findByText('Exports time out for large accounts [1].')).toBeInTheDocument()
+      expect(scroll).toHaveBeenCalled()
+      expect(errors).not.toHaveBeenCalled()
+    } finally {
+      errors.mockRestore()
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+    }
+  })
+
   it('does not send a question that is too short', async () => {
     const user = await openChat({ data: answer })
     await user.type(await screen.findByLabelText('Your question'), 'hi')

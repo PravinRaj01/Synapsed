@@ -35,6 +35,7 @@ type Props = {
 
 /** The canonical KPI card: title, big number, change chip, icon. Every page reuses it. */
 export function StatsCard({ title, value, change, icon: Icon, hero, hint, className }: Props) {
+  const flat = change === 0
   const up = (change ?? 0) >= 0
   const Arrow = up ? ArrowUpRight : ArrowDownRight
   return (
@@ -53,8 +54,8 @@ export function StatsCard({ title, value, change, icon: Icon, hero, hint, classN
           <p className="mt-1 text-3xl font-semibold tabular-nums">{typeof value === 'number' ? <CountUp value={value} /> : value}</p>
           <div className="mt-2 flex items-center gap-2">
             {change != null && (
-              <Chip tone={hero ? 'neutral' : up ? 'positive' : 'negative'} className={hero ? 'bg-white/20 text-white' : undefined}>
-                <Arrow className="size-3.5" aria-hidden />
+              <Chip tone={hero || flat ? 'neutral' : up ? 'positive' : 'negative'} className={hero ? 'bg-white/20 text-white' : undefined}>
+                {!flat && <Arrow className="size-3.5" aria-hidden />}
                 {Math.abs(change)}%
               </Chip>
             )}

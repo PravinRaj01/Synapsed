@@ -31,12 +31,12 @@ function Message({ icon, title, children, actions }: { icon: ReactNode; title: s
 function Skeleton() {
   return (
     <div role="status" aria-label="Loading your dashboard" className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="h-[132px] animate-pulse rounded-card bg-card shadow-card" />
         ))}
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="h-72 animate-pulse rounded-card bg-card shadow-card lg:col-span-2" />
         <div className="h-72 animate-pulse rounded-card bg-card shadow-card" />
       </div>
@@ -135,26 +135,28 @@ export default function Dashboard() {
         </Message>
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatsCard hero title="Insights found" value={o.insights} icon={Lightbulb} change={percentChange(o.trend.insights.current, o.trend.insights.previous)} hint={`vs previous ${o.trend.days} days`} />
             <StatsCard title="Sources indexed" value={o.resources.approved} icon={BookOpenCheck} change={percentChange(o.trend.resources.current, o.trend.resources.previous)} hint={o.resources.staged ? `${o.resources.staged} awaiting approval` : undefined} />
             <StatsCard title="Themes" value={o.themes} icon={Sparkles} change={percentChange(o.trend.themes.current, o.trend.themes.previous)} />
             <StatsCard title="Roadmap items" value={o.roadmap_items} icon={Map} hint={`${o.segments} customer ${o.segments === 1 ? 'segment' : 'segments'}`} />
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <TopThemes themes={o.top_themes} />
             </div>
             <SentimentCard sentiment={o.sentiment} />
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <SuggestedActions actions={suggestedActions(o)} />
             <RecentActivity resources={o.recent_resources} />
           </div>
-          <p className="px-1 text-xs text-muted">
-            Models used so far: {o.telemetry.calls.toLocaleString()} calls, {o.telemetry.tokens.toLocaleString()} tokens
-            {o.telemetry.fallbacks ? `, ${o.telemetry.fallbacks} provider switches` : ''}. <Link to="/laboratory" className="text-accent hover:underline">See the pipeline</Link>
-          </p>
+          {o.telemetry.calls > 0 && (
+            <p className="px-1 text-xs text-muted">
+              Models used so far: {o.telemetry.calls.toLocaleString()} calls, {o.telemetry.tokens.toLocaleString()} tokens
+              {o.telemetry.fallbacks ? `, ${o.telemetry.fallbacks} provider switches` : ''}. <Link to="/laboratory" className="text-accent hover:underline">See the pipeline</Link>
+            </p>
+          )}
         </div>
       )}
       <QuickChat key={campaign.id} campaignId={campaign.id} disabled={empty} />
