@@ -1,4 +1,4 @@
-import { FileText, Lightbulb, Sparkles } from 'lucide-react'
+import { Lightbulb, Sparkles } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/Card'
@@ -10,15 +10,6 @@ function Soon({ icon, title, children }: { icon: ReactNode; title: string; child
       <h2 className="text-lg font-semibold">{title}</h2>
       <p className="max-w-md text-sm text-muted">{children}</p>
     </Card>
-  )
-}
-
-export function ChatStub() {
-  return (
-    <>
-      <PageHeader title="Deep Workspace" subtitle="Ask questions of your sources and get answers with verified quotes." />
-      <Soon icon={<FileText className="size-6" />} title="Coming soon">A document viewer with highlights and a chat that cites its evidence.</Soon>
-    </>
   )
 }
 

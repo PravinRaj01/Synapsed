@@ -1,12 +1,12 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { Check, X } from 'lucide-react'
-import { useMemo } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { inputClass } from '@/components/ui/Field'
 import { useApprove, useReject, useSourceDetail, useUpdateSource, type Segment } from '@/lib/vault'
-import { highlightPieces, SOURCE_TYPE_LABEL } from '@/lib/vaultLogic'
+import { SOURCE_TYPE_LABEL } from '@/lib/vaultLogic'
+import { HighlightedText } from './HighlightedText'
 
 /** A source's text with every quote that backs a pain point highlighted in its theme's colour, plus the actions for it. */
 export function SourceViewer({ id, segments, onClose }: { id: string | null; segments: Segment[]; onClose: () => void }) {
@@ -14,7 +14,6 @@ export function SourceViewer({ id, segments, onClose }: { id: string | null; seg
   const approve = useApprove()
   const reject = useReject()
   const update = useUpdateSource()
-  const pieces = useMemo(() => (source ? highlightPieces(source.content, source.highlights) : []), [source])
 
   async function act(run: () => Promise<unknown>, done: string) {
     try {
@@ -86,22 +85,7 @@ export function SourceViewer({ id, segments, onClose }: { id: string | null; seg
                 </div>
 
                 {source.highlights.length > 0 && <p className="mb-2 text-xs text-muted">Highlighted passages are the quotes behind pain points found in this source.</p>}
-                <div className="rounded-inner bg-inner p-4 text-sm leading-relaxed whitespace-pre-wrap text-ink" data-testid="source-text">
-                  {pieces.map((p, i) =>
-                    p.highlight ? (
-                      <mark
-                        key={i}
-                        title={p.highlight.theme ? `${p.highlight.theme}: ${p.highlight.insight}` : p.highlight.insight}
-                        className="rounded px-0.5 text-ink"
-                        style={{ background: `color-mix(in srgb, ${p.highlight.color ?? 'var(--accent)'} 28%, transparent)`, boxShadow: `inset 0 -2px 0 ${p.highlight.color ?? 'var(--accent)'}` }}
-                      >
-                        {p.text}
-                      </mark>
-                    ) : (
-                      <span key={i}>{p.text}</span>
-                    ),
-                  )}
-                </div>
+                <HighlightedText content={source.content} highlights={source.highlights} />
               </>
             )}
           </div>
