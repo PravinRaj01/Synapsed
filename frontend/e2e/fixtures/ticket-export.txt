@@ -1,0 +1,1 @@
+Support ticket 4821 (Free plan): Export to PDF fails with a generic error "Something went wrong" on any report over a month. I tried three times. Also the bank feed shows the same transaction twice since Tuesday, so my balance is wrong. I am about to file my taxes and cannot trust the numbers. Please fix this soon.

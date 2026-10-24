@@ -9,6 +9,7 @@ test.describe('first-time journey', () => {
   test.skip(({ isMobile }) => isMobile, 'the account can only be set up once, so this runs on desktop only')
 
   test('a new user is sent to set up, loads the demo, sees the dashboard and asks a question', async ({ page }) => {
+    test.setTimeout(150_000) // the last step waits for a live model
     await page.goto('/login')
     await page.getByLabel('Email').fill(email!)
     await page.getByLabel('Password').fill(password!)
@@ -57,7 +58,7 @@ test.describe('first-time journey', () => {
     await page.getByRole('button', { name: 'What are customers struggling with most?' }).click()
     await expect(page.getByText('Reading your sources…')).toBeVisible()
     // The answer comes from a live model: either a cited answer or a plain refusal is a correct outcome.
-    await expect(page.getByText(/^\[1\] /).or(page.getByText('Not in your sources'))).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByText(/^\[\d+\] /).first().or(page.getByText('Not in your sources'))).toBeVisible({ timeout: 60_000 })
     await page.screenshot({ path: 'test-results/dashboard-chat.png' })
 
     await page.reload()
