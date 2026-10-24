@@ -13,9 +13,23 @@ import { useCampaigns } from '@/lib/campaigns'
 import { SORT_LABEL, sortThemes, type SortKey } from '@/lib/report'
 import { useSegments, useThemes } from '@/lib/vault'
 import { useCampaign } from '@/stores/campaign'
+import { ChartCardSkeleton, ListCardSkeleton, Loading } from '@/components/ui/Skeleton'
 
 // The chart library is large, so the Insights Studio is only fetched when its tab is opened.
 const InsightsStudio = lazy(() => import('@/components/insights/InsightsStudio'))
+
+/** What the studio looks like before it has arrived: a wide chart and a grid of smaller ones. */
+function StudioSkeleton() {
+  return (
+    <Loading label="Loading the studio" className="space-y-4">
+      <ChartCardSkeleton className="h-96" />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <ChartCardSkeleton />
+        <ChartCardSkeleton />
+      </div>
+    </Loading>
+  )
+}
 
 type Tab = 'report' | 'insights'
 const TABS: { value: Tab; label: string }[] = [{ value: 'report', label: 'Problem space' }, { value: 'insights', label: 'Insights Studio' }]
@@ -43,7 +57,7 @@ export default function Roadmap() {
   )
 
   if (campaigns.isLoading || (campaign && themes.isLoading)) {
-    return <>{header}<div role="status" aria-label="Loading the report" className="h-80 animate-pulse rounded-card bg-card shadow-card" /></>
+    return <>{header}<Loading label="Loading the report"><ListCardSkeleton rows={6} /></Loading></>
   }
   const failed = campaigns.isError ? campaigns : themes.isError ? themes : null
   if (failed) {
@@ -98,7 +112,7 @@ export default function Roadmap() {
       {header}
       <SegmentedControl<Tab> label="Roadmap view" value={tab} onChange={setTab} options={TABS} className="mb-4 print:hidden" />
       {tab === 'insights' ? (
-        <Suspense fallback={<div role="status" aria-label="Loading the studio" className="h-96 animate-pulse rounded-card bg-card shadow-card" />}>
+        <Suspense fallback={<StudioSkeleton />}>
           <InsightsStudio campaignId={campaign.id} />
         </Suspense>
       ) : (

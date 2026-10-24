@@ -1,10 +1,11 @@
 import { Chip } from '@/components/ui/Chip'
 import { SENTIMENT } from '@/lib/report'
 import { useThemeDetail } from '@/lib/vault'
+import { Loading, RowsSkeleton } from '@/components/ui/Skeleton'
 
 export function ThemeInsights({ themeId, onOpenSource }: { themeId: string; onOpenSource: (id: string) => void }) {
   const { data, isLoading, isError, error } = useThemeDetail(themeId)
-  if (isLoading) return <div role="status" aria-label="Loading pain points" className="h-24 animate-pulse rounded-inner bg-inner" />
+  if (isLoading) return <Loading label="Loading pain points"><RowsSkeleton rows={2} /></Loading>
   if (isError) return <p role="alert" className="text-sm text-negative">{error.message}</p>
   return (
     <ul className="space-y-3">

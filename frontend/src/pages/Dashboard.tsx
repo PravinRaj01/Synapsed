@@ -16,6 +16,7 @@ import { greeting, percentChange, suggestedActions } from '@/lib/onboarding'
 import { firstName, useSession } from '@/lib/session'
 import { useLoadDemo, useOverview, useWorkspaces } from '@/lib/workspaces'
 import { useCampaign } from '@/stores/campaign'
+import { ChartCardSkeleton, FadeIn, Loading, StatCardsSkeleton } from '@/components/ui/Skeleton'
 
 function Message({ icon, title, children, actions }: { icon: ReactNode; title: string; children?: ReactNode; actions?: ReactNode }) {
   return (
@@ -28,19 +29,15 @@ function Message({ icon, title, children, actions }: { icon: ReactNode; title: s
   )
 }
 
-function Skeleton() {
+function DashboardSkeleton() {
   return (
-    <div role="status" aria-label="Loading your dashboard" className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-[132px] animate-pulse rounded-card bg-card shadow-card" />
-        ))}
-      </div>
+    <Loading label="Loading your dashboard" className="space-y-4">
+      <StatCardsSkeleton />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="h-72 animate-pulse rounded-card bg-card shadow-card lg:col-span-2" />
-        <div className="h-72 animate-pulse rounded-card bg-card shadow-card" />
+        <ChartCardSkeleton className="h-72 lg:col-span-2" />
+        <ChartCardSkeleton className="h-72" />
       </div>
-    </div>
+    </Loading>
   )
 }
 
@@ -85,7 +82,7 @@ export default function Dashboard() {
     return (
       <>
         {header}
-        <Skeleton />
+        <DashboardSkeleton />
       </>
     )
   }
@@ -134,7 +131,7 @@ export default function Dashboard() {
           Add interviews, tickets or surveys, or explore with ten invented sources that are already analysed.
         </Message>
       ) : (
-        <div className="space-y-4">
+        <FadeIn className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatsCard hero title="Insights found" value={o.insights} icon={Lightbulb} change={percentChange(o.trend.insights.current, o.trend.insights.previous)} hint={`vs previous ${o.trend.days} days`} />
             <StatsCard title="Sources indexed" value={o.resources.approved} icon={BookOpenCheck} change={percentChange(o.trend.resources.current, o.trend.resources.previous)} hint={o.resources.staged ? `${o.resources.staged} awaiting approval` : undefined} />
@@ -157,7 +154,7 @@ export default function Dashboard() {
               {o.telemetry.fallbacks ? `, ${o.telemetry.fallbacks} provider switches` : ''}. <Link to="/laboratory" className="text-accent hover:underline">See the pipeline</Link>
             </p>
           )}
-        </div>
+        </FadeIn>
       )}
       <QuickChat key={campaign.id} campaignId={campaign.id} disabled={empty} />
     </>
