@@ -2,15 +2,6 @@ import { BookOpenCheck, FileText, Lightbulb, Sparkles } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/Card'
-import { StatsCard } from '@/components/ui/StatsCard'
-import { useCampaigns } from '@/lib/campaigns'
-import { firstName, useSession } from '@/lib/session'
-import { useCampaign } from '@/stores/campaign'
-
-function greeting(date = new Date()) {
-  const h = date.getHours()
-  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
-}
 
 function Soon({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
@@ -19,40 +10,6 @@ function Soon({ icon, title, children }: { icon: ReactNode; title: string; child
       <h2 className="text-lg font-semibold">{title}</h2>
       <p className="max-w-md text-sm text-muted">{children}</p>
     </Card>
-  )
-}
-
-/** The dashboard shell: a greeting and the active campaign's real counts. The full dashboard arrives in the next step. */
-export function DashboardStub() {
-  const { data: user } = useSession()
-  const { data: campaigns = [], isLoading, isError, error, refetch } = useCampaigns()
-  const { campaignId } = useCampaign()
-  const campaign = campaigns.find((c) => c.id === campaignId) ?? campaigns[0]
-  return (
-    <>
-      <PageHeader title={`${greeting()}, ${user ? firstName(user) : 'there'}`} subtitle="Stay on top of your research, monitor progress and track what customers are saying." />
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" role="status" aria-label="Loading your campaigns">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-[132px] animate-pulse rounded-card bg-card shadow-card" />
-          ))}
-        </div>
-      ) : isError ? (
-        <Soon icon={<Sparkles className="size-6" />} title="We could not load your campaigns">
-          {error instanceof Error ? error.message : 'Something went wrong.'}{' '}
-          <button type="button" onClick={() => refetch()} className="font-medium text-accent underline underline-offset-2">Try again</button>
-        </Soon>
-      ) : campaign ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatsCard hero title="Insights found" value={campaign.insights} icon={Lightbulb} hint={campaign.name} />
-          <StatsCard title="Sources indexed" value={campaign.resources} icon={BookOpenCheck} />
-          <StatsCard title="Awaiting approval" value={campaign.staged} icon={FileText} />
-          <StatsCard title="Themes" value={campaign.themes} icon={Sparkles} />
-        </div>
-      ) : (
-        <Soon icon={<Sparkles className="size-6" />} title="Let's set up your first campaign">Campaign setup, with a ready-made demo workspace, arrives in the next step.</Soon>
-      )}
-    </>
   )
 }
 
@@ -88,15 +45,6 @@ export function LaboratoryStub() {
     <>
       <PageHeader title="Discovery Laboratory" subtitle="Watch the analysis pipeline run, and test what-if scenarios." />
       <Soon icon={<Sparkles className="size-6" />} title="Coming soon">The live pipeline canvas and the scenario forecast.</Soon>
-    </>
-  )
-}
-
-export function OnboardingStub() {
-  return (
-    <>
-      <PageHeader title="New campaign" subtitle="Tell us about your product and your customer segments." />
-      <Soon icon={<Sparkles className="size-6" />} title="Coming in the next step">The setup wizard, with segment weights and a demo sandbox, is built next.</Soon>
     </>
   )
 }
