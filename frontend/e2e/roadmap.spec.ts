@@ -47,7 +47,7 @@ test.describe('problem space report', () => {
 
     // CSV: opens in Excel as UTF-8, one row per theme.
     const csv = page.waitForEvent('download')
-    await page.getByRole('button', { name: /CSV/ }).click()
+    await page.getByRole('button', { name: 'CSV', exact: true }).click()
     const csvFile = await csv
     expect(csvFile.suggestedFilename()).toMatch(/-themes\.csv$/)
     const bytes = fs.readFileSync((await csvFile.path())!)
@@ -57,7 +57,7 @@ test.describe('problem space report', () => {
     expect(lines.length).toBe(count + 1)
 
     const md = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Markdown/ }).click()
+    await page.getByRole('button', { name: 'Markdown', exact: true }).click()
     const mdText = fs.readFileSync((await (await md).path())!, 'utf8')
     expect(mdText).toContain('# Problem space report:')
     expect(mdText).toContain('## 1.')
@@ -66,7 +66,7 @@ test.describe('problem space report', () => {
     await page.emulateMedia({ media: 'print' })
     await expect(page.getByRole('banner')).toBeHidden()
     await expect(page.getByRole('heading', { name: /Problem space report:/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /CSV/ })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'CSV', exact: true })).toBeHidden()
     await page.screenshot({ path: 'test-results/roadmap-3-print.png', fullPage: true })
   })
 })

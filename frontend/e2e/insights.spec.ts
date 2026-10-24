@@ -37,10 +37,13 @@ test.describe('insights studio', () => {
 
     // Table view of a stacked chart: the same numbers with a total.
     const sentiment = page.getByRole('heading', { name: 'Sentiment by customer segment' }).locator('xpath=ancestor::div[contains(@class,"rounded-card")][1]')
-    await expect(sentiment.getByRole('list', { name: 'Legend' })).toBeVisible()
+    // The legend is there exactly when there is more than one series (the campaign in use may only have negative feedback).
     await sentiment.getByRole('tab', { name: 'Table' }).click()
+    const columns = await sentiment.getByRole('columnheader').count() // the category, each series, and a Total for a stack
     await expect(sentiment.getByRole('columnheader', { name: 'Total' })).toBeVisible()
     await sentiment.getByRole('tab', { name: 'Chart' }).click()
+    if (columns - 2 > 1) await expect(sentiment.getByRole('list', { name: 'Legend' })).toBeVisible()
+    else await expect(sentiment.getByRole('list', { name: 'Legend' })).toHaveCount(0)
 
     // The dark theme keeps the charts readable.
     await page.getByRole('button', { name: 'Account menu' }).click()
