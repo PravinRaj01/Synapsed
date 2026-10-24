@@ -39,7 +39,7 @@ test.describe('first-time journey', () => {
     await expect(page.getByText('Insights found')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('37', { exact: true })).toBeVisible()
     await expect(page.getByText('Report exports time out').first()).toBeVisible()
-    await expect(page.getByText('Customer sentiment')).toBeVisible()
+    await expect(page.getByText('Tone of what customers said')).toBeVisible()
     await expect(page.getByText('Review 0 sources')).toHaveCount(0)
     await page.waitForTimeout(1200) // let the count-up and bars finish
     await page.screenshot({ path: 'test-results/dashboard-light.png', fullPage: true })

@@ -14,8 +14,8 @@ export function SentimentCard({ sentiment }: { sentiment: Record<string, number>
   const total = shares.reduce((n, s) => n + s.count, 0)
   return (
     <Card className="h-full">
-      <CardTitle>Customer sentiment</CardTitle>
-      <p className="mt-0.5 text-xs text-muted">{total ? `Across ${total.toLocaleString()} pain points and requests` : 'No insights yet'}</p>
+      <CardTitle>Tone of what customers said</CardTitle>
+      <p className="mt-0.5 text-xs text-muted">{total ? `${total.toLocaleString()} ${total === 1 ? 'point' : 'points'} found. How customers sounded about each problem, not a rating of your product.` : 'No insights yet'}</p>
       <div className="mt-5 flex h-3 gap-0.5 overflow-hidden rounded-full bg-inner" role="img" aria-label={shares.map((s) => `${LOOK[s.key].label} ${s.percent}%`).join(', ')}>
         {shares
           .filter((s) => s.count > 0)
