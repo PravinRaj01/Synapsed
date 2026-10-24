@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/neon-auth/:path*",
+      "destination": "/api/neon-auth?path=:path*"
+    },
+    {
+      "source": "/((?!api/|assets/|favicon).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
