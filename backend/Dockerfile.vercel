@@ -1,0 +1,36 @@
+# Synapsed API as a Vercel container function.
+#
+# Vercel's Python runtime caps a function at 500 MB; this backend (torch for the Malay name model, spaCy,
+# Presidio) is about 1.1 GB, so it ships as a container image instead. Vercel builds it from this file when
+# the project's root directory is `backend/`. Vercel sets $PORT and routes requests to it.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HF_HOME=/opt/huggingface
+
+WORKDIR /app
+
+# Dependencies first, so a code-only change does not reinstall torch.
+COPY requirements.txt .
+RUN pip install -r requirements.txt \
+    && python -m spacy download en_core_web_sm
+
+# Bake the Malay name model into the image so a cold start never downloads it (and never meets Hugging Face's
+# rate limits). The script reads the model name from the same setting the app uses.
+COPY scripts/prefetch_models.py scripts/prefetch_models.py
+COPY app/core/config.py app/core/config.py
+COPY app/__init__.py app/__init__.py
+COPY app/core/__init__.py app/core/__init__.py
+RUN python scripts/prefetch_models.py
+
+COPY . .
+
+# Weights are in the image: never reach out to Hugging Face at runtime. Load the name models in the
+# background at startup so the first Malay upload does not wait for them.
+ENV HF_HUB_OFFLINE=1 \
+    PII_WARMUP=true
+
+EXPOSE 80
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-80} --proxy-headers --forwarded-allow-ips='*'"]
