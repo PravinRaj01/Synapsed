@@ -25,13 +25,24 @@ function Soon({ icon, title, children }: { icon: ReactNode; title: string; child
 /** The dashboard shell: a greeting and the active campaign's real counts. The full dashboard arrives in the next step. */
 export function DashboardStub() {
   const { data: user } = useSession()
-  const { data: campaigns = [] } = useCampaigns()
+  const { data: campaigns = [], isLoading, isError, error, refetch } = useCampaigns()
   const { campaignId } = useCampaign()
-  const campaign = campaigns.find((c) => c.id === campaignId)
+  const campaign = campaigns.find((c) => c.id === campaignId) ?? campaigns[0]
   return (
     <>
       <PageHeader title={`${greeting()}, ${user ? firstName(user) : 'there'}`} subtitle="Stay on top of your research, monitor progress and track what customers are saying." />
-      {campaign ? (
+      {isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" role="status" aria-label="Loading your campaigns">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-[132px] animate-pulse rounded-card bg-card shadow-card" />
+          ))}
+        </div>
+      ) : isError ? (
+        <Soon icon={<Sparkles className="size-6" />} title="We could not load your campaigns">
+          {error instanceof Error ? error.message : 'Something went wrong.'}{' '}
+          <button type="button" onClick={() => refetch()} className="font-medium text-accent underline underline-offset-2">Try again</button>
+        </Soon>
+      ) : campaign ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatsCard hero title="Insights found" value={campaign.insights} icon={Lightbulb} hint={campaign.name} />
           <StatsCard title="Sources indexed" value={campaign.resources} icon={BookOpenCheck} />

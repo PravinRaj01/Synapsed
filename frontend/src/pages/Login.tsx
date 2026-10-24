@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { Sparkles } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -10,6 +10,7 @@ import { Logo } from '@/components/layout/Logo'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
+import { warmUpApi } from '@/lib/api'
 import { authClient } from '@/lib/auth'
 import { useSession } from '@/lib/session'
 import { zodResolver } from '@/lib/zodResolver'
@@ -40,6 +41,11 @@ export default function Login() {
     resolver: zodResolver(credentials),
     defaultValues: { name: '', email: '', password: '' },
   })
+
+  // The API sleeps when idle and takes several seconds to wake. Wake it now, while the user is typing their password.
+  useEffect(() => {
+    warmUpApi()
+  }, [])
 
   if (user) return <Navigate to={from} replace />
 
