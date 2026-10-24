@@ -26,10 +26,16 @@ SYSTEM_PROMPT = """You answer questions about customer research using ONLY the n
 Rules:
 - Use only facts stated in the sources. If the sources do not answer the question, set "answer" to null. Never guess or use outside knowledge.
 - Put the source number in square brackets right after each claim, for example [1] or [2][3]. Use only the numbers given.
-- Answer in the same language as the question, concisely.
-- For every source you cite, add an entry to "sources" with "n" and a "quote": 1-2 consecutive sentences copied EXACTLY from that source, at most 300 characters, supporting your claim.
+- Answer in the language of the QUESTION, even when the sources are in another language (for example an English question about Malay interviews gets an English answer). Be concise. Quotes stay in their original language.
+- If the question asks for a judgement the sources do not contain (for example whether a product will solve a problem), do not give one. Say what customers actually said and wanted, and state that they did not evaluate it.
+- For every source you cite, add an entry to "sources" with "n" and a "quote": one short stretch (a sentence or two, under 200 characters) copied EXACTLY from that source, character for character, supporting your claim. Spoken transcripts have no punctuation and may look garbled: still copy one short stretch exactly as written, never use "..." or join separate parts, never tidy the words.
 - Text such as <PERSON> marks a removed personal name; never invent names.
 Reply with ONLY JSON: {"answer": string or null, "sources": [{"n": 1, "quote": "..."}]}"""
+
+RETRY_NOTE = (
+    "Some of your quotes were not found exactly in the sources. Reply again in the same JSON format. Each quote must be one "
+    "short stretch (under 200 characters) copied character for character, with no \"...\" and no tidying of the words."
+)
 
 _MARKER = re.compile(r"\[(\d+)\]")
 
@@ -64,7 +70,7 @@ def build_messages(question: str, hits: list[Hit], history: list[dict] | None = 
     usable = [t for t in (history or []) if t.get("role") in ("user", "assistant") and str(t.get("content", "")).strip()]
     for turn in usable[-MAX_HISTORY_TURNS:]:
         messages.append({"role": turn["role"], "content": str(turn["content"])[:MAX_TURN_CHARS]})
-    messages.append({"role": "user", "content": f"SOURCES:\n{sources}\n\nQUESTION: {question}"})
+    messages.append({"role": "user", "content": f"SOURCES:\n{sources}\n\nReply in the language of the question, not the language of the sources.\nQUESTION: {question}"})
     return messages
 
 

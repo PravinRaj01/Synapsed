@@ -5,10 +5,12 @@ point at the exact words, so every quote is located in the stored text and the m
 gives the offsets. A quote that cannot be found is dropped, never trusted.
 """
 
+import re
 from dataclasses import dataclass
 
 MIN_QUOTE_CHARS = 8
 _EDGE = " \t\r\n\"'“”‘’`"
+_ELLIPSIS = re.compile(r"\s*(?:\.{3,}|…)\s*")  # models shorten long quotes with "..."
 _UNIFY = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-", " ": " "})
 
 
@@ -17,6 +19,11 @@ class QuoteMatch:
     start: int
     end: int
     exact: bool  # False when only whitespace, case or quote-style differences were forgiven
+
+
+def _normalized_floor(origin: list[int], floor: int) -> int:
+    """The first normalised index that comes from original index `floor` or later."""
+    return next((i for i, o in enumerate(origin) if o >= floor), len(origin))
 
 
 def _normalize(text: str) -> tuple[str, list[int]]:
@@ -47,11 +54,27 @@ def _normalize(text: str) -> tuple[str, list[int]]:
 
 def locate_quote(text: str, quote: str) -> QuoteMatch | None:
     """Offsets of `quote` in `text`: an exact match, else one that ignores case, whitespace
-    and quote/dash style. None when it is too short to be meaningful or cannot be found."""
+    and quote/dash style. None when it is too short to be meaningful or cannot be found.
+
+    A quote shortened with "..." is accepted only if every piece is found, in order; the match is the first piece."""
+    match = _locate(text, quote)
+    if match is not None or not _ELLIPSIS.search(quote):
+        return match
+    pieces = [p for p in _ELLIPSIS.split(quote) if p.strip(_EDGE)]
+    first, floor = None, 0
+    for piece in pieces:
+        found = _locate(text, piece, floor)
+        if found is None:
+            return None
+        first, floor = first or found, found.end
+    return first
+
+
+def _locate(text: str, quote: str, floor: int = 0) -> QuoteMatch | None:
     quote = quote.strip(_EDGE)
     if len(quote) < MIN_QUOTE_CHARS:
         return None
-    position = text.find(quote)
+    position = text.find(quote, floor)
     if position != -1:
         return QuoteMatch(position, position + len(quote), True)
 
@@ -60,7 +83,7 @@ def locate_quote(text: str, quote: str) -> QuoteMatch | None:
     normalized_quote = normalized_quote.strip()
     if len(normalized_quote) < MIN_QUOTE_CHARS:
         return None
-    position = normalized_text.find(normalized_quote)
+    position = normalized_text.find(normalized_quote, _normalized_floor(origin, floor))
     if position == -1:
         return None
     start = origin[position]
