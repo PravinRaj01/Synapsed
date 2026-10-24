@@ -29,6 +29,13 @@ describe('StatsCard', () => {
     expect(screen.getByText('5%').closest('span')).toHaveClass('text-negative')
   })
 
+  it('shows no change as a plain 0%, neither up nor down', () => {
+    render(<StatsCard title="Sources" value="10" change={0} icon={Lightbulb} />)
+    const chip = screen.getByText('0%').closest('span')!
+    expect(chip).toHaveClass('text-muted')
+    expect(chip.querySelector('svg')).toBeNull()
+  })
+
   it('hides the chip when there is no previous period, and styles the hero card', () => {
     const { container } = render(<StatsCard hero title="Critical" value="9" icon={Lightbulb} hint="vs last month" />)
     expect(screen.queryByText(/%/)).not.toBeInTheDocument()
