@@ -181,3 +181,17 @@
     transform: translateX(100%);
   }
 }
+
+/* Printing a PRD from its panel: only the PRD, on a plain page. */
+#prd-print {
+  display: none;
+}
+@media print {
+  body[data-printing='prd'] > *:not(#prd-print) {
+    display: none !important;
+  }
+  body[data-printing='prd'] #prd-print {
+    display: block;
+    color: #000;
+  }
+}
