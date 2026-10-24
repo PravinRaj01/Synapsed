@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 // The Neon Auth service lives on another domain, so its session cookie would be third-party and Safari blocks
 // those. The app talks to it through its own origin at /neon-auth (a proxy here, a rewrite in vercel.json), which
@@ -25,5 +25,6 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     globals: false,
     css: false,
+    exclude: [...configDefaults.exclude, 'e2e/**'], // Playwright runs those
   },
 })

@@ -3,8 +3,11 @@
   "rewrites": [
     {
       "source": "/neon-auth/:path*",
-      "destination": "https://ep-flat-glade-ao11yi0v.neonauth.c-2.ap-southeast-1.aws.neon.tech/neondb/auth/:path*"
+      "destination": "/api/neon-auth?path=:path*"
     },
-    { "source": "/((?!assets/|favicon).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api/|assets/|favicon).*)",
+      "destination": "/index.html"
+    }
   ]
 }
