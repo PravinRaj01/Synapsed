@@ -35,16 +35,27 @@ test.describe('knowledge vault', () => {
       { name: 'archive.zip', mimeType: 'application/zip', buffer: Buffer.from('PK') },
     ])
     await expect(page.getByText('.zip files are not supported')).toBeVisible()
-    await page.getByRole('button', { name: 'Add 2 files' }).click()
-    await expect(page.getByRole('img', { name: 'Added' }).or(page.getByLabel('Added'))).toHaveCount(2, { timeout: 90_000 })
-    await page.screenshot({ path: 'test-results/vault-1-added.png' })
+    await page.screenshot({ path: 'test-results/vault-1-filled.png' })
 
-    await page.getByRole('tab', { name: 'Paste text' }).click()
-    await page.getByLabel('Title').fill('Call with a mid-market customer')
-    await page.getByLabel('Text', { exact: true }).fill('Our bank connection drops every couple of weeks and we only notice when a payment is missing from the ledger. Reconnecting means logging in with the bank again every single time, which is really annoying.')
-    await page.getByRole('button', { name: 'Add note' }).click()
-    await expect(page.getByText(/characters/).first()).toBeVisible({ timeout: 60_000 })
+    // Once something is chosen, a click outside the dialog (or Escape) must not throw it away.
+    await page.mouse.click(5, 5)
     await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByText('archive.zip')).toBeVisible()
+
+    // Submitting closes it by itself, with a message.
+    await page.getByRole('button', { name: 'Add 2 files' }).click()
+    await expect(page.getByRole('dialog')).toBeHidden({ timeout: 90_000 })
+    await expect(page.getByText('Added 2 sources for review. 1 file was skipped.')).toBeVisible()
+
+    // A pasted note closes the same way.
+    await page.getByRole('button', { name: 'Add sources' }).first().click()
+    await page.getByRole('tab', { name: 'Paste text' }).click()
+    await page.getByLabel('Title').first().fill('Call with a mid-market customer')
+    await page.getByLabel('Text', { exact: true }).first().fill('Our bank connection drops every couple of weeks and we only notice when a payment is missing from the ledger. Reconnecting means logging in with the bank again every single time, which is really annoying.')
+    await page.getByRole('button', { name: 'Add note' }).click()
+    await expect(page.getByRole('dialog')).toBeHidden({ timeout: 60_000 })
+    await expect(page.getByText('Added 1 source for review.')).toBeVisible()
 
     // Three sources awaiting approval.
     await expect(page.getByRole('tab', { name: /Sources \(3\)/ })).toBeVisible({ timeout: 30_000 })

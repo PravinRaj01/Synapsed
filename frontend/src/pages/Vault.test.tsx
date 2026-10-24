@@ -252,7 +252,8 @@ describe('adding sources', () => {
     await user.selectOptions(screen.getAllByLabelText('Customer segment')[0], 's1') // the Files tab's; the other tabs stay mounted but hidden
     await user.selectOptions(screen.getAllByLabelText('What kind of source is it?')[0], 'ticket')
     await user.click(screen.getByRole('button', { name: 'Add file' }))
-    expect(await screen.findByText('1 personal detail was hidden.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument()) // a form closes when it has been submitted
+    expect(toast.success).toHaveBeenCalledWith('Added 1 source for review.')
     expect(put).toHaveBeenCalledWith('open', 'PUT', 'https://store/put')
     expect(posts('/api/v1/uploads')[0][1].body).toMatchObject({ campaign_id: 'c1', filename: 'notes.txt' })
     expect(posts('/api/v1/ingest/stored')[0][1].body).toEqual({ campaign_id: 'c1', key: 'c1/abc/notes.txt', segment_id: 's1', source_type: 'ticket', text_column: null, segment_column: null })
@@ -277,8 +278,116 @@ describe('adding sources', () => {
     await user.upload(await screen.findByLabelText('Choose files'), new File(['hello customers'], 'notes.txt', { type: 'text/plain' }))
     await user.click(screen.getByRole('button', { name: 'Add file' }))
     expect(await screen.findByText(/The upload did not finish/)).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument() // stays open so the reason can be read and the file retried
     expect(posts('/api/v1/ingest/stored')).toHaveLength(0)
+    expect(toast.success).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('the add sources dialog and accidental closing', () => {
+  async function open() {
+    const user = setup([source('a')])
+    await user.click(await screen.findByRole('button', { name: 'Add sources' }))
+    await screen.findByRole('dialog')
+    return user
+  }
+  // The page behind a modal dialog cannot be clicked; the click outside lands on the dim overlay.
+  const clickOutside = (user: ReturnType<typeof userEvent.setup>) => user.click(document.querySelector('[data-state="open"].inset-0') as HTMLElement)
+
+  it('closes on a click outside, or Escape, while nothing has been filled in', async () => {
+    const user = await open()
+    await clickOutside(user)
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Add sources' }))
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('stays open on a click outside or Escape once anything has been typed, and says why', async () => {
+    const user = await open()
+    await user.click(screen.getByRole('tab', { name: 'Paste text' }))
+    await user.type(screen.getAllByLabelText('Title')[0], 'Call with Acme')
+    expect(screen.getByText(/kept if you click outside/)).toBeInTheDocument()
+    await clickOutside(user)
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('Title')[0]).toHaveValue('Call with Acme') // nothing lost
+  })
+
+  it('counts a chosen file, a chosen segment and a typed search as filled in', async () => {
+    const user = await open()
+    await user.upload(screen.getByLabelText('Choose files'), new File(['hello customers'], 'notes.txt', { type: 'text/plain' }))
+    await clickOutside(user)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Remove notes.txt' }))
+    await user.selectOptions(screen.getAllByLabelText('Customer segment')[0], 's1')
+    await clickOutside(user)
+    expect(screen.getByRole('dialog')).toBeInTheDocument() // a chosen segment is a change too
+    await user.selectOptions(screen.getAllByLabelText('Customer segment')[0], '')
+    await user.click(screen.getByRole('tab', { name: 'Web research' }))
+    await user.type(screen.getByLabelText('What should we look for?'), 'invoice software')
+    await clickOutside(user)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('still closes with the X, and the form is empty the next time', async () => {
+    const user = await open()
+    await user.click(screen.getByRole('tab', { name: 'Paste text' }))
+    await user.type(screen.getAllByLabelText('Title')[0], 'Call with Acme')
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Add sources' }))
+    expect(screen.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('tab', { name: 'Paste text' }))
+    expect(screen.getAllByLabelText('Title')[0]).toHaveValue('')
+    await clickOutside(user) // clean again, so a click outside closes it
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('closes by itself after a pasted note is added, with a message', async () => {
+    http.POST.mockImplementation(async (path: string) =>
+      path === '/api/v1/uploads'
+        ? { data: { key: 'c1/abc/note.txt', url: 'https://store/put', expires_in: 900, max_bytes: 1 } }
+        : { data: { duplicates: 0, resources: [{ id: 'n1', title: 'note.txt', status: 'staged', duplicate: false, chars: 90, language: 'en', redactions: {} }] } },
+    )
+    class OkXhr {
+      upload = { onprogress: null }
+      onload: null | (() => void) = null
+      onerror: null | (() => void) = null
+      onabort: null | (() => void) = null
+      status = 200
+      open() {}
+      send() { queueMicrotask(() => this.onload?.()) }
+      abort() {}
+    }
+    vi.stubGlobal('XMLHttpRequest', OkXhr)
+    const user = await open()
+    await user.click(screen.getByRole('tab', { name: 'Paste text' }))
+    await user.type(screen.getAllByLabelText('Text')[0], 'Our bank connection drops every couple of weeks and nobody notices.')
+    await user.click(screen.getByRole('button', { name: 'Add note' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(toast.success).toHaveBeenCalledWith('Added 1 source for review.')
+    vi.unstubAllGlobals()
+  })
+
+  it('closes after a web search that added pages, and stays open when nothing was readable', async () => {
+    http.POST.mockResolvedValueOnce({ data: [{ url: 'https://x.test/a', title: 'A thread', resource: { id: 'w1', title: 'A thread', status: 'staged', duplicate: false, chars: 500, language: 'en', redactions: {} } }, { url: 'https://x.test/b', title: 'Paywalled', skipped: 'could not be read' }] })
+    const user = await open()
+    await user.click(screen.getByRole('tab', { name: 'Web research' }))
+    await user.type(screen.getByLabelText('What should we look for?'), 'invoice software complaints')
+    await user.click(screen.getByRole('button', { name: 'Search the web' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(toast.success).toHaveBeenCalledWith('Found 2 pages. Added 1 source for review.')
+
+    http.POST.mockResolvedValueOnce({ data: [{ url: 'https://x.test/c', title: 'Paywalled', skipped: 'could not be read' }] })
+    await user.click(screen.getByRole('button', { name: 'Add sources' }))
+    await user.click(screen.getByRole('tab', { name: 'Web research' }))
+    await user.type(screen.getByLabelText('What should we look for?'), 'something obscure')
+    await user.click(screen.getByRole('button', { name: 'Search the web' }))
+    expect(await screen.findByText(/Skipped: could not be read/)).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
 
