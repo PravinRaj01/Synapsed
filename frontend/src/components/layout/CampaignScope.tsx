@@ -5,17 +5,20 @@ import { useNavigate } from 'react-router'
 import { useCampaigns } from '@/lib/campaigns'
 import { useCampaign } from '@/stores/campaign'
 
+const NONE: never[] = [] // a stable empty list: a fresh [] each render would re-run the effect below forever
+
 /** The Global Campaign Scope: one choice here filters every page. Falls back to the first campaign if the saved one is gone. */
 export function CampaignScope() {
-  const { data: campaigns = [], isLoading } = useCampaigns()
+  const { data, isLoading, isError } = useCampaigns()
+  const campaigns = data ?? NONE
   const { campaignId, setCampaign } = useCampaign()
   const navigate = useNavigate()
   const active = campaigns.find((c) => c.id === campaignId)
 
   useEffect(() => {
-    if (isLoading) return
+    if (isLoading || isError) return // a failed load says nothing about which campaigns exist: keep the saved choice
     if (!active) setCampaign(campaigns[0]?.id ?? null)
-  }, [isLoading, active, campaigns, setCampaign])
+  }, [isLoading, isError, active, campaigns, setCampaign])
 
   return (
     <Menu.Root>

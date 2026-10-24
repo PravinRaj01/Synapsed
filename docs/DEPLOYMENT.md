@@ -24,7 +24,7 @@ Set these in the Vercel project (Production). Values live in your own `.env`; ne
 | `NEON_AUTH_BASE_URL` | Neon Auth base URL (used to verify sign-in tokens) |
 | `NEON_STORAGE_ENDPOINT`, `NEON_STORAGE_REGION`, `NEON_STORAGE_ACCESS_KEY`, `NEON_STORAGE_SECRET_KEY`, `NEON_STORAGE_BUCKET` | Neon Object Storage |
 | `GROQ_API_KEY`, `GOOGLE_API_KEY`, `SEALION_API_KEY` | Model providers |
-| `FRONTEND_ORIGIN` | The deployed frontend's origin, for CORS (no trailing slash) |
+| `FRONTEND_ORIGIN` | The deployed frontend's origin(s), for CORS: no trailing slash, several separated by commas (the project's short and long Vercel addresses both work) |
 | `JIRA_*` | Optional; the Jira button is hidden when they are blank |
 
 **Do not set `DATABASE_URL_ADMIN`.** It is the database owner's connection string, used only for migrations and tests. The server never needs it, and a leaked owner credential bypasses row-level security.

@@ -8,7 +8,12 @@ type CampaignState = {
 }
 
 export const useCampaign = create<CampaignState>()(
-  persist((set) => ({ campaignId: null, setCampaign: (campaignId) => set({ campaignId }) }), {
-    name: 'synapsed-campaign',
-  }),
+  persist(
+    (set) => ({
+      campaignId: null,
+      // Setting the value it already has changes nothing and tells nobody, so it can never start a render loop.
+      setCampaign: (campaignId) => set((s) => (s.campaignId === campaignId ? s : { campaignId })),
+    }),
+    { name: 'synapsed-campaign' },
+  ),
 )

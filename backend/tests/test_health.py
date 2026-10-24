@@ -31,6 +31,14 @@ def test_cors_allows_local_frontend():
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
 
 
+def test_frontend_origin_may_list_several_addresses():
+    from app.core.config import Settings
+
+    settings = Settings(frontend_origin=" https://a.example/ , https://b.example,,https://a.example ")
+    assert settings.cors_origins == ["http://localhost:5173", "https://a.example", "https://b.example"]
+    assert Settings(frontend_origin="").cors_origins == ["http://localhost:5173"]
+
+
 def test_cors_rejects_other_origins():
     response = client.options(
         "/health",
