@@ -167,7 +167,7 @@ def test_a_persona_is_written_for_each_segment_with_enough_insights(world, monke
 def test_regenerating_replaces_generated_personas_but_never_hand_made_ones(world, monkeypatch):
     w = world.world
     manual = world.post(f"/api/v1/campaigns/{w.campaign}/personas", json={"name": "Our CFO", "description": "Signs off on every renewal.", "segment_id": w.seg["Enterprise"]})
-    assert manual.status_code == 201 and manual.json()["attributes"] == {"generated": False}
+    assert manual.status_code == 201 and manual.json()["attributes"]["generated"] is False and manual.json()["attributes"]["quotes"] == []
     monkeypatch.setattr(api, "call_llm", scripted(*[persona_json(), persona_json()] * 2))
     generate(world)
     second = generate(world, segment_ids=[w.seg["Enterprise"]]).json()
