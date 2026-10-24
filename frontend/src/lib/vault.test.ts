@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { noteFile, putFile, uploadSource } from './upload'
 import {
+  addedMessage,
   applyTrace,
   awaitingAnalysis,
   checkFile,
@@ -257,5 +258,16 @@ describe('sourceTypeFor', () => {
     expect(sourceTypeFor('scan.pdf', 'ticket')).toBeNull()
     expect(sourceTypeFor('call.mp3', 'transcript')).toBeNull()
     expect(sourceTypeFor('notes.txt', '')).toBeNull()
+  })
+})
+
+describe('addedMessage', () => {
+  const r = (duplicate: boolean) => ({ id: 'x', title: 't', status: 'staged', duplicate, chars: 10, language: 'en', redactions: {} })
+  it('says what was new, what was already there and what was skipped', () => {
+    expect(addedMessage([r(false)])).toBe('Added 1 source for review.')
+    expect(addedMessage([r(false), r(false), r(true)])).toBe('Added 2 sources for review. 1 was already in this campaign.')
+    expect(addedMessage([r(true), r(true)])).toBe('Nothing new was added. 2 were already in this campaign.')
+    expect(addedMessage([r(false)], 2)).toBe('Added 1 source for review. 2 files were skipped.')
+    expect(addedMessage([r(false)], 1)).toBe('Added 1 source for review. 1 file was skipped.')
   })
 })

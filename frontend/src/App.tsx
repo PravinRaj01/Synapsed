@@ -10,7 +10,8 @@ import Login from '@/pages/Login'
 import Dashboard from '@/pages/Dashboard'
 import Onboarding from '@/pages/Onboarding'
 import Vault from '@/pages/Vault'
-import { ChatStub, LaboratoryStub, RoadmapStub } from '@/pages/Stubs'
+import Chat from '@/pages/Chat'
+import { LaboratoryStub, RoadmapStub } from '@/pages/Stubs'
 import { useTheme } from '@/stores/theme'
 
 export default function App() {
@@ -40,7 +41,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/vault" element={<Vault />} />
-          <Route path="/chat" element={<ChatStub />} />
+          <Route path="/chat" element={<Chat />} />
           <Route path="/roadmap" element={<RoadmapStub />} />
           <Route path="/laboratory" element={<LaboratoryStub />} />
           <Route path="/onboarding" element={<Onboarding />} />

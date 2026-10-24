@@ -1,15 +1,20 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { AlertTriangle, CheckCircle2, FileText, Loader2, Plus, Upload, X } from 'lucide-react'
-import { useId, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type DragEvent } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Field, inputClass } from '@/components/ui/Field'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { cn } from '@/lib/cn'
 import { noteFile, uploadSource } from '@/lib/upload'
 import { useRefreshVault, useResearch, type Segment } from '@/lib/vault'
-import { ACCEPT, CHOSEN_TYPES, checkFile, formatBytes, ingestNote, isTable, sourceTypeFor, type ChosenType, type Ingested } from '@/lib/vaultLogic'
+import { ACCEPT, addedMessage, CHOSEN_TYPES, checkFile, formatBytes, ingestNote, isTable, sourceTypeFor, type ChosenType, type Ingested } from '@/lib/vaultLogic'
 
 type Tab = 'upload' | 'paste' | 'web'
+
+/** What a tab tells the dialog: whether anything has been filled in (so it will not close by accident), and when it is done. */
+type TabProps = { campaignId: string; segments: Segment[]; onDirty: (dirty: boolean) => void; onDone: (message: string) => void }
+
 type Item = { id: string; file: File; state: 'ready' | 'sending' | 'done' | 'error'; progress: number; error?: string; results?: Ingested[]; refused?: string }
 
 let counter = 0
@@ -54,7 +59,7 @@ function ResultNote({ r }: { r: Ingested }) {
   )
 }
 
-function UploadTab({ campaignId, segments }: { campaignId: string; segments: Segment[] }) {
+function UploadTab({ campaignId, segments, onDirty, onDone }: TabProps) {
   const refresh = useRefreshVault()
   const input = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<Item[]>([])
@@ -78,21 +83,31 @@ function UploadTab({ campaignId, segments }: { campaignId: string; segments: Seg
   }
 
   const sendable = items.filter((i) => i.state === 'ready' && !i.refused)
+  const dirty = items.length > 0 || !!(segmentId || chosenType || textColumn || segmentColumn)
+  useEffect(() => {
+    onDirty(dirty)
+  }, [dirty, onDirty])
   const hasTable = items.some((i) => isTable(i.file.name))
 
   async function send() {
     setBusy(true)
+    const results: Ingested[] = []
+    let failed = false
     for (const item of sendable) {
       patch(item.id, { state: 'sending', progress: 0 })
       try {
         const out = await uploadSource(item.file, { campaignId, segmentId: segmentId || null, textColumn, segmentColumn, sourceType: sourceTypeFor(item.file.name, chosenType) }, (progress) => patch(item.id, { progress }))
         patch(item.id, { state: 'done', progress: 1, results: out.resources })
+        results.push(...out.resources)
       } catch (e) {
+        failed = true
         patch(item.id, { state: 'error', error: e instanceof Error ? e.message : 'The upload failed.' })
       }
       await refresh()
     }
     setBusy(false)
+    // Everything went through: close, as a form does. If a file failed, stay open so its reason can be read and it can be retried.
+    if (!failed && results.length > 0) onDone(addedMessage(results, items.filter((i) => i.refused).length))
   }
 
   return (
@@ -170,7 +185,7 @@ function UploadTab({ campaignId, segments }: { campaignId: string; segments: Seg
   )
 }
 
-function PasteTab({ campaignId, segments }: { campaignId: string; segments: Segment[] }) {
+function PasteTab({ campaignId, segments, onDirty, onDone }: TabProps) {
   const refresh = useRefreshVault()
   const [title, setTitle] = useState('')
   const [text, setText] = useState('')
@@ -178,17 +193,18 @@ function PasteTab({ campaignId, segments }: { campaignId: string; segments: Segm
   const [chosenType, setChosenType] = useState<ChosenType>('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [added, setAdded] = useState<Ingested[] | null>(null)
+  const dirty = !!(title || text || segmentId || chosenType)
+  useEffect(() => {
+    onDirty(dirty)
+  }, [dirty, onDirty])
 
   async function add() {
     setBusy(true)
     setError(null)
     try {
       const out = await uploadSource(noteFile(text, title), { campaignId, segmentId: segmentId || null, sourceType: chosenType || null })
-      setAdded(out.resources)
-      setText('')
-      setTitle('')
       await refresh()
+      onDone(addedMessage(out.resources))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The note could not be added.')
     } finally {
@@ -209,7 +225,6 @@ function PasteTab({ campaignId, segments }: { campaignId: string; segments: Segm
         <TypeSelect value={chosenType} onChange={setChosenType} />
       </div>
       {error && <p role="alert" className="text-sm text-negative">{error}</p>}
-      {added && <ul className="space-y-1.5">{added.map((r) => <ResultNote key={r.id} r={r} />)}</ul>}
       <div className="flex justify-end">
         <Button type="button" loading={busy} disabled={text.trim().length < 20} onClick={add}>
           Add note
@@ -219,11 +234,28 @@ function PasteTab({ campaignId, segments }: { campaignId: string; segments: Segm
   )
 }
 
-function WebTab({ campaignId, segments }: { campaignId: string; segments: Segment[] }) {
+function WebTab({ campaignId, segments, onDirty, onDone }: TabProps) {
   const research = useResearch(campaignId)
   const [query, setQuery] = useState('')
   const [segmentId, setSegmentId] = useState('')
   const results = research.data
+  const dirty = !!(query || segmentId)
+  useEffect(() => {
+    onDirty(dirty)
+  }, [dirty, onDirty])
+
+  function search() {
+    research.mutate(
+      { query: query.trim(), segmentId: segmentId || null },
+      {
+        onSuccess: (found) => {
+          const kept = found.flatMap((f) => (f.resource ? [f.resource] : []))
+          // Something was added: close like a form. Nothing readable: stay, so the reasons can be read and the words changed.
+          if (kept.length > 0) onDone(`Found ${found.length} ${found.length === 1 ? 'page' : 'pages'}. ${addedMessage(kept)}`)
+        },
+      },
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -249,7 +281,7 @@ function WebTab({ campaignId, segments }: { campaignId: string; segments: Segmen
         </ul>
       )}
       <div className="flex justify-end">
-        <Button type="button" loading={research.isPending} disabled={query.trim().length < 3} onClick={() => research.mutate({ query: query.trim(), segmentId: segmentId || null })}>
+        <Button type="button" loading={research.isPending} disabled={query.trim().length < 3} onClick={search}>
           Search the web
         </Button>
       </div>
@@ -261,9 +293,29 @@ function WebTab({ campaignId, segments }: { campaignId: string; segments: Segmen
 export function AddSources({ campaignId, segments }: { campaignId: string; segments: Segment[] }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('upload')
+  const [dirty, setDirty] = useState<Record<Tab, boolean>>({ upload: false, paste: false, web: false })
   const titleId = useId()
+  const dirtyUpload = useCallback((d: boolean) => setDirty((p) => (p.upload === d ? p : { ...p, upload: d })), [])
+  const dirtyPaste = useCallback((d: boolean) => setDirty((p) => (p.paste === d ? p : { ...p, paste: d })), [])
+  const dirtyWeb = useCallback((d: boolean) => setDirty((p) => (p.web === d ? p : { ...p, web: d })), [])
+  const locked = dirty.upload || dirty.paste || dirty.web
+
+  function close() {
+    setOpen(false)
+    setTab('upload')
+    setDirty({ upload: false, paste: false, web: false }) // the form unmounts with the dialog, so it starts empty next time
+  }
+  function finish(message: string) {
+    close()
+    toast.success(message)
+  }
+  // A click beside the dialog or the Escape key must not throw away what was typed or an upload in progress; the X still closes it.
+  const keepOpen = (e: Event) => {
+    if (locked) e.preventDefault()
+  }
+
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <Dialog.Trigger asChild>
         <Button>
           <Plus className="size-4" aria-hidden /> Add sources
@@ -271,7 +323,7 @@ export function AddSources({ campaignId, segments }: { campaignId: string; segme
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
-        <Dialog.Content aria-labelledby={titleId} className="fixed top-1/2 left-1/2 z-50 max-h-[90dvh] w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card border border-line bg-card p-6 shadow-lift outline-none">
+        <Dialog.Content aria-labelledby={titleId} onInteractOutside={keepOpen} onEscapeKeyDown={keepOpen} className="fixed top-1/2 left-1/2 z-50 max-h-[90dvh] w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card border border-line bg-card p-6 shadow-lift outline-none">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <Dialog.Title id={titleId} className="text-lg font-semibold text-ink">Add sources</Dialog.Title>
@@ -289,9 +341,10 @@ export function AddSources({ campaignId, segments }: { campaignId: string; segme
             options={[{ value: 'upload', label: 'Files' }, { value: 'paste', label: 'Paste text' }, { value: 'web', label: 'Web research' }]}
           />
           {/* All three stay mounted so switching tabs never loses an upload in progress. */}
-          <div hidden={tab !== 'upload'}><UploadTab campaignId={campaignId} segments={segments} /></div>
-          <div hidden={tab !== 'paste'}><PasteTab campaignId={campaignId} segments={segments} /></div>
-          <div hidden={tab !== 'web'}><WebTab campaignId={campaignId} segments={segments} /></div>
+          <div hidden={tab !== 'upload'}><UploadTab campaignId={campaignId} segments={segments} onDirty={dirtyUpload} onDone={finish} /></div>
+          <div hidden={tab !== 'paste'}><PasteTab campaignId={campaignId} segments={segments} onDirty={dirtyPaste} onDone={finish} /></div>
+          <div hidden={tab !== 'web'}><WebTab campaignId={campaignId} segments={segments} onDirty={dirtyWeb} onDone={finish} /></div>
+          {locked && <p className="mt-4 text-center text-xs text-muted">What you entered is kept if you click outside. Use the × to close.</p>}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

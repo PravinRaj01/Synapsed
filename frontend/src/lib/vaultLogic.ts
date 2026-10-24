@@ -151,7 +151,7 @@ export function shouldContinue(last: RunSummary, batchesDone: number): boolean {
 
 // ---------------------------------------------------------------- highlighting quotes in a source
 
-export type Highlight = { start_offset: number; end_offset: number; color?: string | null; theme?: string | null; insight?: string }
+export type Highlight = { start_offset: number; end_offset: number; color?: string | null; theme?: string | null; insight?: string; /** the one quote being looked at */ focus?: boolean }
 export type Piece = { text: string; highlight?: Highlight }
 
 /**
@@ -203,4 +203,14 @@ export function sourceTypeFor(filename: string, chosen: ChosenType): ChosenType 
   if (kind === 'text' || kind === 'json') return chosen
   if (kind === 'table') return chosen === 'ticket' || chosen === 'survey' ? chosen : null
   return null
+}
+
+/** The toast after sources were added: what was new, what was already there, what was skipped. */
+export function addedMessage(results: Ingested[], skipped = 0): string {
+  const fresh = results.filter((r) => !r.duplicate).length
+  const dup = results.length - fresh
+  const parts = [fresh > 0 ? `Added ${fresh} ${fresh === 1 ? 'source' : 'sources'} for review.` : 'Nothing new was added.']
+  if (dup > 0) parts.push(`${dup} ${dup === 1 ? 'was' : 'were'} already in this campaign.`)
+  if (skipped > 0) parts.push(`${skipped} ${skipped === 1 ? 'file was' : 'files were'} skipped.`)
+  return parts.join(' ')
 }
