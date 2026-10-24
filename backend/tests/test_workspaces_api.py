@@ -56,6 +56,29 @@ def test_create_and_list_workspaces(world):
     assert [w["id"] for w in listed] == [ws["id"]] and listed[0]["company"] == "Acme" and listed[0]["role"] == "owner"
 
 
+def test_workspace_profile_is_saved_and_editable(world):
+    r = world.post("/api/v1/workspaces", json={"name": "P", "company": "Acme", "industry": "SaaS", "domain": "Invoicing",
+                                               "target_audience": "Finance teams", "owner_role": "Head of Product"})
+    assert r.status_code == 201, r.text
+    world.who.workspaces.append(r.json()["id"])
+    assert (r.json()["domain"], r.json()["target_audience"], r.json()["owner_role"]) == ("Invoicing", "Finance teams", "Head of Product")
+    edited = world.patch(f"/api/v1/workspaces/{r.json()['id']}", json={"domain": "Payments", "target_audience": None})
+    assert edited.status_code == 200 and edited.json()["domain"] == "Payments" and edited.json()["target_audience"] is None
+    assert edited.json()["owner_role"] == "Head of Product"  # untouched
+    listed = world.get("/api/v1/workspaces").json()[0]
+    assert listed["domain"] == "Payments" and listed["role"] == "owner"
+
+
+def test_workspace_edit_rules(world):
+    ws = workspace(world)
+    url = f"/api/v1/workspaces/{ws['id']}"
+    assert world.patch(url, json={}).status_code == 422
+    assert world.patch(url, json={"company": None}).status_code == 422
+    assert world.patch(f"/api/v1/workspaces/{uuid4()}", json={"domain": "x"}).status_code == 404
+    world.who.id = uuid4()  # a stranger cannot edit it
+    assert world.patch(url, json={"domain": "x"}).status_code == 404
+
+
 def test_workspace_needs_all_fields(world):
     assert world.post("/api/v1/workspaces", json={"name": "x", "company": "", "industry": "SaaS"}).status_code == 422
     assert world.post("/api/v1/workspaces", json={"name": "x"}).status_code == 422
