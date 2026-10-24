@@ -1,48 +1,11 @@
 import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 import { Card } from '@/components/ui/Card'
-import { Chip, type Tone } from '@/components/ui/Chip'
+import { Chip } from '@/components/ui/Chip'
+import { ThemeInsights } from '@/components/report/ThemeEvidence'
+import { SENTIMENT } from '@/lib/report'
 import { cn } from '@/lib/cn'
-import { useThemeDetail, useThemes, type ThemeRow } from '@/lib/vault'
-
-const SENTIMENT: Record<ThemeRow['sentiment'], { label: string; tone: Tone }> = {
-  positive: { label: 'Positive', tone: 'positive' },
-  negative: { label: 'Negative', tone: 'negative' },
-  neutral: { label: 'Neutral', tone: 'neutral' },
-  mixed: { label: 'Mixed', tone: 'warning' },
-}
-
-function ThemeInsights({ themeId, onOpenSource }: { themeId: string; onOpenSource: (id: string) => void }) {
-  const { data, isLoading, isError, error } = useThemeDetail(themeId)
-  if (isLoading) return <div role="status" aria-label="Loading pain points" className="h-24 animate-pulse rounded-inner bg-inner" />
-  if (isError) return <p role="alert" className="text-sm text-negative">{error.message}</p>
-  return (
-    <ul className="space-y-3">
-      {data!.insights.map((i) => (
-        <li key={i.id} className="rounded-inner bg-inner p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-ink">{i.summary_text}</span>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-            <Chip tone={i.kind === 'feature_request' ? 'accent' : 'neutral'}>{i.kind === 'feature_request' ? 'Feature request' : 'Pain point'}</Chip>
-            <Chip tone={SENTIMENT[i.sentiment].tone}>{SENTIMENT[i.sentiment].label}</Chip>
-            <span>Severity {i.severity}/5</span>
-            {i.segment && <span>· {i.segment}</span>}
-            {i.use_case && <span>· {i.use_case}</span>}
-          </div>
-          {i.citations.map((c, k) => (
-            <blockquote key={k} className="mt-3 border-l-2 pl-3 text-sm text-ink italic" style={{ borderColor: data!.color }}>
-              “{c.text_snippet}”
-              <button type="button" onClick={() => onOpenSource(c.resource_id)} className="mt-1 block text-xs text-accent not-italic hover:underline">
-                {c.resource_title}
-              </button>
-            </blockquote>
-          ))}
-        </li>
-      ))}
-    </ul>
-  )
-}
+import { useThemes } from '@/lib/vault'
 
 /** Themes found in the sources, ranked by business impact. Open one to read its pain points and the customers' own words. */
 export function PainPoints({ campaignId, onOpenSource }: { campaignId: string; onOpenSource: (id: string) => void }) {
