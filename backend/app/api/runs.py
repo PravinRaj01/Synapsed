@@ -11,6 +11,8 @@ import json
 import logging
 import queue
 import threading
+from datetime import datetime
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -170,7 +172,35 @@ def _status(last_run_event: str | None, last_event_age_minutes: float) -> str:
     return last_run_event
 
 
-@router.get("/runs")
+class RunSummaryOut(BaseModel):
+    run_id: UUID
+    started_at: datetime
+    last_event_at: datetime
+    tokens: int
+    events: int
+    status: str  # running | done | error | stale | unknown
+
+
+class RunEventOut(BaseModel):
+    node: str
+    status: Literal["running", "done", "error"]
+    model_used: str | None
+    prompt: str | None
+    input: Any
+    output: Any
+    tokens: int | None
+    latency_ms: int | None
+    created_at: datetime
+
+
+class RunDetailOut(BaseModel):
+    run_id: UUID
+    status: str
+    tokens: int
+    events: list[RunEventOut]
+
+
+@router.get("/runs", response_model=list[RunSummaryOut])
 def list_runs(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     """The campaign's most recent runs, newest first."""
     require_campaign(user.id, campaign_id)
@@ -191,7 +221,7 @@ def list_runs(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     ]
 
 
-@router.get("/runs/{run_id}")
+@router.get("/runs/{run_id}", response_model=RunDetailOut)
 def get_run(run_id: UUID, user: AuthUser = Depends(current_user)):
     """Every stored event of a run, oldest first, with the prompts: what the Laboratory canvas replays."""
     with user_tx(user.id) as conn:
