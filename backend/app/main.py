@@ -15,6 +15,7 @@ from app.api.prds import router as prds_router
 from app.api.report import router as report_router
 from app.api.runs import router as runs_router
 from app.api.scenario import router as scenario_router
+from app.api.sources import router as sources_router
 from app.api.workspaces import router as workspaces_router
 from app.core import database, name_models
 from app.core.config import get_settings
@@ -54,6 +55,7 @@ app.include_router(prds_router)
 app.include_router(report_router)
 app.include_router(runs_router)
 app.include_router(scenario_router)
+app.include_router(sources_router)
 app.include_router(workspaces_router)
 
 

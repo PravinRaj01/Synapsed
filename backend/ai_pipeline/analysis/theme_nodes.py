@@ -190,20 +190,25 @@ THEME_STATS_SQL = """
 """
 
 
+def score_themes(conn, campaign_id) -> int:
+    """Frequency and Business Impact for every theme in the campaign (impact is relative to the top theme)."""
+    rows = conn.execute(
+        THEME_STATS_SQL, {"campaign": campaign_id, "default_weight": scoring.DEFAULT_SEGMENT_WEIGHT}
+    ).fetchall()
+    impacts = scoring.business_impacts({str(r["id"]): float(r["raw"]) for r in rows})
+    for r in rows:
+        conn.execute(
+            "update themes set frequency = %s, business_impact = %s where id = %s",
+            (r["frequency"], impacts[str(r["id"])], r["id"]),
+        )
+    return len(rows)
+
+
 @traced("score")
 def score_node(state: RunState, deps: Deps) -> dict:
     """Frequency and Business Impact for every theme in the campaign (impact is relative to the top theme)."""
     with user_tx(state["user_id"]) as conn:
-        rows = conn.execute(
-            THEME_STATS_SQL, {"campaign": state["campaign_id"], "default_weight": scoring.DEFAULT_SEGMENT_WEIGHT}
-        ).fetchall()
-        impacts = scoring.business_impacts({str(r["id"]): float(r["raw"]) for r in rows})
-        for r in rows:
-            conn.execute(
-                "update themes set frequency = %s, business_impact = %s where id = %s",
-                (r["frequency"], impacts[str(r["id"])], r["id"]),
-            )
-    return {"scored_themes": len(rows)}
+        return {"scored_themes": score_themes(conn, state["campaign_id"])}
 
 
 # ---------------------------------------------------------------- roadmap
