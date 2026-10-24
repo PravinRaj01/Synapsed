@@ -1,0 +1,11 @@
+# Never upload secrets, local environments or test data to the build.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+.git/
