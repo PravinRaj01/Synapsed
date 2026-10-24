@@ -27,6 +27,78 @@ router = APIRouter(prefix="/api/v1", tags=["scenario"])
 MAX_WEIGHT = 20.0
 
 
+class WeekPointOut(BaseModel):
+    week: str  # the Monday of the week, ISO date
+    value: float
+    partial: bool  # the current week, still filling up
+
+
+class ForecastPointOut(BaseModel):
+    week: str
+    value: float
+    lower: float
+    upper: float
+
+
+class ForecastOut(BaseModel):
+    metric: Literal["insights", "impact"]
+    scope: dict[str, str]  # {"theme": ..., "segment": ...}, empty for the whole campaign
+    estimate: Literal[True]
+    series: list[WeekPointOut]
+    forecast: list[ForecastPointOut] | None  # null until there are enough complete weeks
+    trend: Literal["rising", "falling", "flat"] | None
+    weekly_change: float | None = None
+    method: str
+    weeks_used: int
+    interval: str | None = None
+    note: str
+    narrative: str | None
+
+
+class ImpactAtOut(BaseModel):
+    business_impact: float
+    rank: int
+    frequency: int
+
+
+class ScenarioThemeOut(BaseModel):
+    theme_id: str
+    label: str
+    before: ImpactAtOut
+    after: ImpactAtOut
+    impact_change: float
+    rank_change: int  # positive = moved up
+
+
+class WeightChangeOut(BaseModel):
+    segment: str
+    from_: float = Field(alias="from")
+    to: float
+
+    model_config = {"populate_by_name": True}
+
+
+class ExtraAssumptionOut(BaseModel):
+    theme: str
+    segment: str | None
+    count: int
+
+
+class AssumptionsOut(BaseModel):
+    segment_weights: list[WeightChangeOut]
+    extra_insights: list[ExtraAssumptionOut]
+
+
+class ScenarioOut(BaseModel):
+    estimate: Literal[True]
+    assumptions: AssumptionsOut
+    themes: list[ScenarioThemeOut]
+    top_before: str | None
+    top_after: str | None
+    narrative: str | None
+    note: str
+
+
 class ForecastRequest(BaseModel):
     metric: Literal["insights", "impact"] = "insights"
     theme_id: UUID | None = None
@@ -76,7 +148,7 @@ def _narrate(user_id, campaign_id, data: dict) -> str | None:
     return narrative.narrate(data, call_llm, record)
 
 
-@router.post("/campaigns/{campaign_id}/forecast")
+@router.post("/campaigns/{campaign_id}/forecast", response_model=ForecastOut)
 def forecast_trend(campaign_id: UUID, body: ForecastRequest, user: AuthUser = Depends(limited("forecast"))):
     """Weekly history of insights (or Business Impact) for the campaign, a theme or a segment, and a short forecast."""
     require_campaign(user.id, campaign_id)
@@ -112,7 +184,7 @@ def forecast_trend(campaign_id: UUID, body: ForecastRequest, user: AuthUser = De
     return result
 
 
-@router.post("/campaigns/{campaign_id}/scenario")
+@router.post("/campaigns/{campaign_id}/scenario", response_model=ScenarioOut, response_model_by_alias=True)
 def scenario(campaign_id: UUID, body: ScenarioRequest, user: AuthUser = Depends(limited("forecast"))):
     """What if the customer segments counted differently, or we heard more about a theme? Impact and rank before and after."""
     require_campaign(user.id, campaign_id)

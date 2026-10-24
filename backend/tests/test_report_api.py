@@ -187,6 +187,18 @@ def test_dashboard_overview(world):
     assert o["telemetry"]["calls"] == 2 and o["telemetry"]["tokens"] == 800 and o["telemetry"]["fallbacks"] == 1
     assert {m["model_used"] for m in o["telemetry"]["by_model"]} == {"groq:a", "gemini:b"}
     assert o["last_run"]["status"] in ("running", "done")
+    assert o["trend"]["days"] == 7 and o["trend"]["insights"] == {"current": 4, "previous": 0}  # everything was just created
+    assert o["trend"]["resources"]["current"] == 3 and o["trend"]["themes"]["current"] == 2
+
+
+def test_trend_compares_this_week_with_the_week_before(world):
+    w = world.world
+    with psycopg.connect(settings.database_url_admin) as admin:  # backdate rows: two insights to last week, one to long ago
+        ids = [r[0] for r in admin.execute("select id from insights where campaign_id = %s order by id", (w.campaign,)).fetchall()]
+        admin.execute("update insights set created_at = now() - interval '10 days' where id = any(%s)", (ids[:2],))
+        admin.execute("update insights set created_at = now() - interval '40 days' where id = %s", (ids[2],))
+    trend = world.get(f"/api/v1/campaigns/{w.campaign}/overview").json()["trend"]
+    assert trend["insights"] == {"current": 1, "previous": 2}  # the 40-day-old one is in neither window
 
 
 def test_overview_of_an_empty_campaign(world):
@@ -194,6 +206,7 @@ def test_overview_of_an_empty_campaign(world):
     o = world.get(f"/api/v1/campaigns/{c['id']}/overview").json()
     assert o["resources"]["total"] == 0 and o["top_themes"] == [] and o["last_run"] is None
     assert o["telemetry"] == {"calls": 0, "tokens": 0, "fallbacks": 0, "by_model": []}
+    assert o["trend"] == {"days": 7, **{k: {"current": 0, "previous": 0} for k in ("resources", "insights", "themes")}}
     assert world.get(f"/api/v1/campaigns/{c['id']}/themes").json() == []
     assert world.get(f"/api/v1/campaigns/{c['id']}/roadmap").json() == []
 

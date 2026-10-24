@@ -71,7 +71,51 @@ def _describe(n: int, hit: Hit) -> dict:
             "vector_rank": hit.vector_rank, "keyword_rank": hit.keyword_rank}
 
 
-@router.post("/chat")
+class RetrievedOut(BaseModel):
+    n: int
+    resource_id: UUID
+    resource_title: str
+    chunk_id: UUID
+    similarity: float | None
+    vector_rank: int | None
+    keyword_rank: int | None
+
+
+class CitationOut(BaseModel):
+    n: int
+    resource_id: UUID
+    resource_title: str
+    chunk_id: UUID
+    start_offset: int
+    end_offset: int
+    snippet: str
+    verified: bool  # the offsets point at the quoted words, not just the retrieved passage
+
+
+class ChatOut(BaseModel):
+    answer: str | None
+    refused: bool
+    reason: str | None  # no_sources | not_in_sources | ungrounded | unreadable_reply
+    message: str | None  # the plain refusal text to show when refused
+    citations: list[CitationOut]
+    retrieved: list[RetrievedOut]
+    model: str | None
+    tokens: int
+
+
+class SearchHitOut(BaseModel):
+    chunk_id: UUID
+    resource_id: UUID
+    resource_title: str
+    snippet: str
+    start_offset: int
+    end_offset: int
+    score: float
+    similarity: float | None
+    matched_by: list[Literal["meaning", "keywords"]]
+
+
+@router.post("/chat", response_model=ChatOut)
 def chat(req: ChatRequest, user: AuthUser = Depends(limited("chat"))):
     """Answer from the approved sources with [n] citations, or refuse when they do not support an answer."""
     require_campaign(user.id, req.campaign_id)
@@ -101,7 +145,7 @@ def chat(req: ChatRequest, user: AuthUser = Depends(limited("chat"))):
     }
 
 
-@router.get("/search")
+@router.get("/search", response_model=list[SearchHitOut])
 def search(
     campaign_id: UUID, q: str = Query(min_length=2, max_length=300), limit: int = Query(10, ge=1, le=20),
     source_ids: list[UUID] | None = Query(None, max_length=50), user: AuthUser = Depends(limited("search")),

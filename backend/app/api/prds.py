@@ -2,11 +2,13 @@
 
 import logging
 import re
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from psycopg.types.json import Jsonb
+from pydantic import BaseModel
 
 from ai_pipeline import prd as prd_logic
 from ai_pipeline.providers import AllProvidersFailed, Completion, chain_for, complete
@@ -27,6 +29,74 @@ ITEM_SQL = """
 """
 
 
+class UserStoryOut(BaseModel):
+    as_a: str
+    i_want: str
+    so_that: str
+    evidence: list[int]  # numbers of the evidence quotes that back the story
+
+
+class PrdBodyOut(BaseModel):
+    title: str
+    context: str
+    problem: str
+    goals: list[str]
+    user_stories: list[UserStoryOut]
+    acceptance_criteria: list[str]
+    out_of_scope: list[str]
+    success_metrics: list[str]
+
+
+class EvidenceOut(BaseModel):
+    n: int
+    insight_id: UUID
+    summary: str
+    severity: int
+    sentiment: str
+    segment: str | None
+    quote: str
+    resource_id: UUID
+    resource_title: str
+    start_offset: int
+    end_offset: int
+
+
+class StoredPrdOut(BaseModel):
+    prd: PrdBodyOut
+    evidence: list[EvidenceOut]
+
+
+class PrdOut(BaseModel):
+    id: UUID
+    roadmap_item_id: UUID
+    content: StoredPrdOut
+    markdown: str
+    jira_issue_key: str | None
+    created_at: datetime
+
+
+class PrdVersionOut(BaseModel):
+    id: UUID
+    roadmap_item_id: UUID
+    title: str | None
+    jira_issue_key: str | None
+    created_at: datetime
+
+
+class JiraStatusOut(BaseModel):
+    configured: bool
+    project_key: str | None
+
+
+class IntegrationsOut(BaseModel):
+    jira: JiraStatusOut
+
+
+class JiraIssueOut(BaseModel):
+    jira_issue_key: str
+    url: str
+
+
 def call_llm(messages: list[dict]) -> Completion:
     """The model call for a PRD (English, structured output); tests replace this."""
     return complete(messages, chain_for("en"), max_tokens=2200)
@@ -36,7 +106,7 @@ def _filename(title: str) -> str:
     return (re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-").lower() or "prd")[:60] + ".md"
 
 
-@router.post("/roadmap/{item_id}/prd", status_code=201)
+@router.post("/roadmap/{item_id}/prd", status_code=201, response_model=PrdOut)
 def generate_prd(item_id: UUID, user: AuthUser = Depends(limited("prd"))):
     """Write a PRD for the roadmap item from its theme's evidence. Each call stores a new version."""
     with user_tx(user.id) as conn:
@@ -76,7 +146,7 @@ def generate_prd(item_id: UUID, user: AuthUser = Depends(limited("prd"))):
     return row
 
 
-@router.get("/roadmap/{item_id}/prds")
+@router.get("/roadmap/{item_id}/prds", response_model=list[PrdVersionOut])
 def list_prds(item_id: UUID, user: AuthUser = Depends(current_user)):
     with user_tx(user.id) as conn:
         if conn.execute("select 1 from roadmap_items where id = %s", (item_id,)).fetchone() is None:
@@ -98,7 +168,7 @@ def _get(user_id: UUID, prd_id: UUID) -> dict:
     return row
 
 
-@router.get("/prds/{prd_id}")
+@router.get("/prds/{prd_id}", response_model=PrdOut)
 def get_prd(prd_id: UUID, user: AuthUser = Depends(current_user)):
     return _get(user.id, prd_id)
 
@@ -121,13 +191,13 @@ def delete_prd(prd_id: UUID, user: AuthUser = Depends(current_user)) -> None:
         raise HTTPException(404, "PRD not found")
 
 
-@router.get("/integrations")
+@router.get("/integrations", response_model=IntegrationsOut)
 def integrations(user: AuthUser = Depends(current_user)):
     """Which optional integrations the server has configured, so the UI can hide the buttons that would fail."""
     return {"jira": {"configured": jira.configured(get_settings()), "project_key": get_settings().jira_project_key or None}}
 
 
-@router.post("/prds/{prd_id}/jira")
+@router.post("/prds/{prd_id}/jira", response_model=JiraIssueOut)
 def send_to_jira(prd_id: UUID, user: AuthUser = Depends(current_user)):
     """Create a Jira issue from the PRD. A PRD is sent once; its issue key is kept."""
     settings = get_settings()

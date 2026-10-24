@@ -44,6 +44,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/campaigns/{campaign_id}/demo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Load Demo Sandbox
+         * @description Fill an empty campaign with invented sources, pain points, themes and a roadmap (no LLM calls).
+         *
+         *     Missing demo segments (Enterprise, Mid-Market, Free) are added; segments the campaign already has are kept.
+         */
+        post: operations["load_demo_sandbox_api_v1_campaigns__campaign_id__demo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ingest": {
         parameters: {
             query?: never;
@@ -743,6 +765,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Workspace
+         * @description Delete a workspace with all its campaigns and stored files. Only an owner may.
+         */
+        delete: operations["delete_workspace_api_v1_workspaces__workspace_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Workspace
+         * @description Edit the business profile. Any field may be cleared except the three required ones.
+         */
+        patch: operations["update_workspace_api_v1_workspaces__workspace_id__patch"];
+        trace?: never;
+    };
     "/api/v1/campaigns": {
         parameters: {
             query?: never;
@@ -827,26 +873,6 @@ export interface paths {
         patch: operations["update_segment_api_v1_segments__segment_id__patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete Workspace
-         * @description Delete a workspace with all its campaigns and stored files. Only an owner may.
-         */
-        delete: operations["delete_workspace_api_v1_workspaces__workspace_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/health": {
         parameters: {
             query?: never;
@@ -881,6 +907,28 @@ export interface components {
             /** Resource Ids */
             resource_ids?: string[] | null;
         };
+        /** ApprovedOut */
+        ApprovedOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "approved";
+            /** Chunks */
+            chunks: number;
+        };
+        /** AssumptionsOut */
+        AssumptionsOut: {
+            /** Segment Weights */
+            segment_weights: components["schemas"]["WeightChangeOut"][];
+            /** Extra Insights */
+            extra_insights: components["schemas"]["ExtraAssumptionOut"][];
+        };
         /** Body_ingest_api_v1_ingest_post */
         Body_ingest_api_v1_ingest_post: {
             /**
@@ -906,6 +954,47 @@ export interface components {
             /** Segment Id */
             segment_id?: string | null;
         };
+        /** BulkSegmentOut */
+        BulkSegmentOut: {
+            /** Updated */
+            updated: number;
+            /** Segment Id */
+            segment_id: string | null;
+            /** Rescored */
+            rescored: boolean;
+        };
+        /** CampaignDetailOut */
+        CampaignDetailOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Name */
+            name: string;
+            /** Goal */
+            goal: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Resources */
+            resources: number;
+            /** Staged */
+            staged: number;
+            /** Insights */
+            insights: number;
+            /** Themes */
+            themes: number;
+            /** Segments */
+            segments: components["schemas"]["SegmentOut"][];
+        };
         /** CampaignIn */
         CampaignIn: {
             /**
@@ -919,6 +1008,36 @@ export interface components {
             goal?: string | null;
             /** Segments */
             segments?: components["schemas"]["SegmentIn"][];
+        };
+        /** CampaignOut */
+        CampaignOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Name */
+            name: string;
+            /** Goal */
+            goal: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Resources */
+            resources: number;
+            /** Staged */
+            staged: number;
+            /** Insights */
+            insights: number;
+            /** Themes */
+            themes: number;
         };
         /** CampaignPatch */
         CampaignPatch: {
@@ -936,6 +1055,27 @@ export interface components {
             field: "theme" | "segment" | "sentiment" | "use_case" | "kind" | "severity" | "source_type" | "language";
             /** Values */
             values: string[];
+        };
+        /** ChartOut */
+        ChartOut: {
+            spec: components["schemas"]["ChartSpec"];
+            result: components["schemas"]["ChartResultOut"];
+        };
+        /** ChartResultOut */
+        ChartResultOut: {
+            /** X */
+            x: string[];
+            /** Series */
+            series: components["schemas"]["ChartSeriesOut"][];
+            /** Measure */
+            measure: string;
+        };
+        /** ChartSeriesOut */
+        ChartSeriesOut: {
+            /** Name */
+            name: string;
+            /** Values */
+            values: number[];
         };
         /** ChartSpec */
         ChartSpec: {
@@ -968,6 +1108,25 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** ChatOut */
+        ChatOut: {
+            /** Answer */
+            answer: string | null;
+            /** Refused */
+            refused: boolean;
+            /** Reason */
+            reason: string | null;
+            /** Message */
+            message: string | null;
+            /** Citations */
+            citations: components["schemas"]["CitationOut"][];
+            /** Retrieved */
+            retrieved: components["schemas"]["RetrievedOut"][];
+            /** Model */
+            model: string | null;
+            /** Tokens */
+            tokens: number;
+        };
         /** ChatRequest */
         ChatRequest: {
             /**
@@ -982,6 +1141,82 @@ export interface components {
             /** History */
             history?: components["schemas"]["Turn"][];
         };
+        /** CitationOut */
+        CitationOut: {
+            /** N */
+            n: number;
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Resource Title */
+            resource_title: string;
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /** Start Offset */
+            start_offset: number;
+            /** End Offset */
+            end_offset: number;
+            /** Snippet */
+            snippet: string;
+            /** Verified */
+            verified: boolean;
+        };
+        /** DemoLoadedOut */
+        DemoLoadedOut: {
+            /** Resources */
+            resources: number;
+            /** Insights */
+            insights: number;
+            /** Themes */
+            themes: number;
+            /** Roadmap Items */
+            roadmap_items: number;
+        };
+        /** EvidenceOut */
+        EvidenceOut: {
+            /** N */
+            n: number;
+            /**
+             * Insight Id
+             * Format: uuid
+             */
+            insight_id: string;
+            /** Summary */
+            summary: string;
+            /** Severity */
+            severity: number;
+            /** Sentiment */
+            sentiment: string;
+            /** Segment */
+            segment: string | null;
+            /** Quote */
+            quote: string;
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Resource Title */
+            resource_title: string;
+            /** Start Offset */
+            start_offset: number;
+            /** End Offset */
+            end_offset: number;
+        };
+        /** ExtraAssumptionOut */
+        ExtraAssumptionOut: {
+            /** Theme */
+            theme: string;
+            /** Segment */
+            segment: string | null;
+            /** Count */
+            count: number;
+        };
         /** ExtraInsights */
         ExtraInsights: {
             /**
@@ -995,6 +1230,59 @@ export interface components {
             count: number;
             /** Severity */
             severity?: number | null;
+        };
+        /** FailedOut */
+        FailedOut: {
+            /** Segment */
+            segment: string;
+            /** Error */
+            error: string;
+        };
+        /** ForecastOut */
+        ForecastOut: {
+            /**
+             * Metric
+             * @enum {string}
+             */
+            metric: "insights" | "impact";
+            /** Scope */
+            scope: {
+                [key: string]: string;
+            };
+            /**
+             * Estimate
+             * @constant
+             */
+            estimate: true;
+            /** Series */
+            series: components["schemas"]["WeekPointOut"][];
+            /** Forecast */
+            forecast: components["schemas"]["ForecastPointOut"][] | null;
+            /** Trend */
+            trend: ("rising" | "falling" | "flat") | null;
+            /** Weekly Change */
+            weekly_change?: number | null;
+            /** Method */
+            method: string;
+            /** Weeks Used */
+            weeks_used: number;
+            /** Interval */
+            interval?: string | null;
+            /** Note */
+            note: string;
+            /** Narrative */
+            narrative: string | null;
+        };
+        /** ForecastPointOut */
+        ForecastPointOut: {
+            /** Week */
+            week: string;
+            /** Value */
+            value: number;
+            /** Lower */
+            lower: number;
+            /** Upper */
+            upper: number;
         };
         /** ForecastRequest */
         ForecastRequest: {
@@ -1024,10 +1312,55 @@ export interface components {
             /** Segment Ids */
             segment_ids?: string[] | null;
         };
+        /** GeneratedPersonasOut */
+        GeneratedPersonasOut: {
+            /** Personas */
+            personas: components["schemas"]["PersonaOut"][];
+            /** Skipped */
+            skipped: components["schemas"]["SkippedOut"][];
+            /** Failed */
+            failed: components["schemas"]["FailedOut"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HighlightOut */
+        HighlightOut: {
+            /**
+             * Citation Id
+             * Format: uuid
+             */
+            citation_id: string;
+            /**
+             * Insight Id
+             * Format: uuid
+             */
+            insight_id: string;
+            /** Start Offset */
+            start_offset: number;
+            /** End Offset */
+            end_offset: number;
+            /** Text Snippet */
+            text_snippet: string;
+            /** Insight */
+            insight: string;
+            /** Theme Id */
+            theme_id: string | null;
+            /** Theme */
+            theme: string | null;
+            /** Color */
+            color: string | null;
+        };
+        /** ImpactAtOut */
+        ImpactAtOut: {
+            /** Business Impact */
+            business_impact: number;
+            /** Rank */
+            rank: number;
+            /** Frequency */
+            frequency: number;
         };
         /** IngestResponse */
         IngestResponse: {
@@ -1060,6 +1393,158 @@ export interface components {
             /** Pii Notice */
             pii_notice?: string | null;
         };
+        /** IntegrationsOut */
+        IntegrationsOut: {
+            jira: components["schemas"]["JiraStatusOut"];
+        };
+        /** JiraIssueOut */
+        JiraIssueOut: {
+            /** Jira Issue Key */
+            jira_issue_key: string;
+            /** Url */
+            url: string;
+        };
+        /** JiraStatusOut */
+        JiraStatusOut: {
+            /** Configured */
+            configured: boolean;
+            /** Project Key */
+            project_key: string | null;
+        };
+        /** LastRunOut */
+        LastRunOut: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+        };
+        /** MatrixPointOut */
+        MatrixPointOut: {
+            /**
+             * Theme Id
+             * Format: uuid
+             */
+            theme_id: string;
+            /** Label */
+            label: string;
+            /** Color */
+            color: string;
+            /** Frequency */
+            frequency: number;
+            /** Business Impact */
+            business_impact: number;
+            /** Ice Score */
+            ice_score: number | null;
+            /** Horizon */
+            horizon: ("now" | "next" | "later") | null;
+            /**
+             * Quadrant
+             * @enum {string}
+             */
+            quadrant: "priority" | "high_stakes" | "common_annoyance" | "monitor";
+            /** Quadrant Label */
+            quadrant_label: string;
+        };
+        /** ModelUsageOut */
+        ModelUsageOut: {
+            /** Model Used */
+            model_used: string;
+            /** Calls */
+            calls: number;
+            /** Tokens */
+            tokens: number;
+            /** Fallbacks */
+            fallbacks: number;
+        };
+        /** OpportunityMatrixOut */
+        OpportunityMatrixOut: {
+            /** Impact Line */
+            impact_line: number;
+            /** Frequency Line */
+            frequency_line: number;
+            /** Points */
+            points: components["schemas"]["MatrixPointOut"][];
+            /** Quadrants */
+            quadrants: components["schemas"]["QuadrantOut"][];
+        };
+        /** OverviewOut */
+        OverviewOut: {
+            resources: components["schemas"]["ResourceCountsOut"];
+            /** Insights */
+            insights: number;
+            /** Themes */
+            themes: number;
+            /** Roadmap Items */
+            roadmap_items: number;
+            /** Segments */
+            segments: number;
+            /** Sentiment */
+            sentiment: {
+                [key: string]: number;
+            };
+            trend: components["schemas"]["TrendOut"];
+            /** Top Themes */
+            top_themes: components["schemas"]["TopThemeOut"][];
+            /** Recent Resources */
+            recent_resources: components["schemas"]["RecentResourceOut"][];
+            last_run: components["schemas"]["LastRunOut"] | null;
+            telemetry: components["schemas"]["TelemetryOut"];
+        };
+        /** PeriodCountOut */
+        PeriodCountOut: {
+            /** Current */
+            current: number;
+            /** Previous */
+            previous: number;
+        };
+        /**
+         * PersonaAttributesOut
+         * @description What generation stores; a persona written by hand only has generated=false.
+         */
+        PersonaAttributesOut: {
+            /**
+             * Generated
+             * @default false
+             */
+            generated: boolean;
+            /**
+             * Goals
+             * @default []
+             */
+            goals: string[];
+            /**
+             * Frustrations
+             * @default []
+             */
+            frustrations: string[];
+            /**
+             * Behaviours
+             * @default []
+             */
+            behaviours: string[];
+            /**
+             * Typical Use Cases
+             * @default []
+             */
+            typical_use_cases: string[];
+            /**
+             * Quotes
+             * @default []
+             */
+            quotes: components["schemas"]["PersonaQuoteOut"][];
+            /** Insight Count */
+            insight_count?: number | null;
+            /** Evidence Used */
+            evidence_used?: number | null;
+        };
         /** PersonaIn */
         PersonaIn: {
             /** Name */
@@ -1069,6 +1554,30 @@ export interface components {
             /** Segment Id */
             segment_id?: string | null;
         };
+        /** PersonaOut */
+        PersonaOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /** Segment Id */
+            segment_id: string | null;
+            /** Segment */
+            segment: string | null;
+            /** Tier */
+            tier: string | null;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            attributes: components["schemas"]["PersonaAttributesOut"];
+        };
         /** PersonaPatch */
         PersonaPatch: {
             /** Name */
@@ -1076,10 +1585,211 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** PersonaQuoteOut */
+        PersonaQuoteOut: {
+            /** Quote */
+            quote: string;
+            /** Summary */
+            summary: string;
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Resource Title */
+            resource_title: string;
+            /** Start Offset */
+            start_offset: number;
+            /** End Offset */
+            end_offset: number;
+        };
+        /** PipelineEdgeOut */
+        PipelineEdgeOut: {
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            /** Conditional */
+            conditional: boolean;
+            /** Virtual */
+            virtual: boolean;
+        };
+        /** PipelineNodeOut */
+        PipelineNodeOut: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Kind */
+            kind: string;
+            /** Description */
+            description: string;
+            /**
+             * Virtual
+             * @default false
+             */
+            virtual: boolean;
+            /** Parent */
+            parent?: string | null;
+        };
+        /** PipelineOut */
+        PipelineOut: {
+            /** Nodes */
+            nodes: components["schemas"]["PipelineNodeOut"][];
+            /** Edges */
+            edges: components["schemas"]["PipelineEdgeOut"][];
+            /** Mermaid */
+            mermaid: string;
+            /** Trace Nodes */
+            trace_nodes: string[];
+        };
+        /** PrdBodyOut */
+        PrdBodyOut: {
+            /** Title */
+            title: string;
+            /** Context */
+            context: string;
+            /** Problem */
+            problem: string;
+            /** Goals */
+            goals: string[];
+            /** User Stories */
+            user_stories: components["schemas"]["UserStoryOut"][];
+            /** Acceptance Criteria */
+            acceptance_criteria: string[];
+            /** Out Of Scope */
+            out_of_scope: string[];
+            /** Success Metrics */
+            success_metrics: string[];
+        };
+        /** PrdOut */
+        PrdOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Roadmap Item Id
+             * Format: uuid
+             */
+            roadmap_item_id: string;
+            content: components["schemas"]["StoredPrdOut"];
+            /** Markdown */
+            markdown: string;
+            /** Jira Issue Key */
+            jira_issue_key: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** PrdVersionOut */
+        PrdVersionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Roadmap Item Id
+             * Format: uuid
+             */
+            roadmap_item_id: string;
+            /** Title */
+            title: string | null;
+            /** Jira Issue Key */
+            jira_issue_key: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** PresetChartOut */
+        PresetChartOut: {
+            spec: components["schemas"]["ChartSpec"];
+            result: components["schemas"]["ChartResultOut"];
+            /** Key */
+            key: string;
+            /** Title */
+            title: string | null;
+        };
+        /** PromptChartOut */
+        PromptChartOut: {
+            spec: components["schemas"]["ChartSpec"];
+            result: components["schemas"]["ChartResultOut"];
+            /** Title */
+            title: string | null;
+            /** Model */
+            model: string | null;
+            /** Tokens */
+            tokens: number;
+        };
         /** PromptChartRequest */
         PromptChartRequest: {
             /** Prompt */
             prompt: string;
+        };
+        /** QuadrantOut */
+        QuadrantOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /** QuoteOut */
+        QuoteOut: {
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Resource Title */
+            resource_title: string;
+            /** Chunk Id */
+            chunk_id: string | null;
+            /** Text Snippet */
+            text_snippet: string;
+            /** Start Offset */
+            start_offset: number;
+            /** End Offset */
+            end_offset: number;
+        };
+        /** RecentResourceOut */
+        RecentResourceOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Source Type */
+            source_type: string;
+            /** Status */
+            status: string;
+            /** Language */
+            language: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** RejectedOut */
+        RejectedOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "rejected";
         };
         /** ResearchRequest */
         ResearchRequest: {
@@ -1108,6 +1818,174 @@ export interface components {
             /** Skipped */
             skipped?: string | null;
         };
+        /** ResourceCountsOut */
+        ResourceCountsOut: {
+            /** Total */
+            total: number;
+            /** Staged */
+            staged: number;
+            /** Approved */
+            approved: number;
+            /** Rejected */
+            rejected: number;
+            /** Waiting For Analysis */
+            waiting_for_analysis: number;
+        };
+        /** ResourceDetailOut */
+        ResourceDetailOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /** Title */
+            title: string;
+            /** Source Type */
+            source_type: string;
+            /** Source Url */
+            source_url: string | null;
+            /** Language */
+            language: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "staged" | "approved" | "rejected";
+            /** Content */
+            content: string;
+            /** Summary */
+            summary: string | null;
+            /** Pii Redacted */
+            pii_redacted: boolean;
+            /** Pii Note */
+            pii_note: string | null;
+            /** Segment Id */
+            segment_id: string | null;
+            /** Segment */
+            segment: string | null;
+            /** Analyzed At */
+            analyzed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Highlights */
+            highlights: components["schemas"]["HighlightOut"][];
+        };
+        /** ResourceListItem */
+        ResourceListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Source Type */
+            source_type: string;
+            /** Source Url */
+            source_url: string | null;
+            /** Language */
+            language: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "staged" | "approved" | "rejected";
+            /** Pii Redacted */
+            pii_redacted: boolean;
+            /** Pii Note */
+            pii_note: string | null;
+            /** Summary */
+            summary: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Chars */
+            chars: number;
+            /** Segment Id */
+            segment_id: string | null;
+            /** Segment */
+            segment: string | null;
+            /** Analyzed At */
+            analyzed_at: string | null;
+            /** Chunk Count */
+            chunk_count: number;
+        };
+        /** RetrievedOut */
+        RetrievedOut: {
+            /** N */
+            n: number;
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Resource Title */
+            resource_title: string;
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /** Similarity */
+            similarity: number | null;
+            /** Vector Rank */
+            vector_rank: number | null;
+            /** Keyword Rank */
+            keyword_rank: number | null;
+        };
+        /** RoadmapItemOut */
+        RoadmapItemOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /** Theme Id */
+            theme_id: string | null;
+            /** Theme */
+            theme: string | null;
+            /** Color */
+            color: string | null;
+            /** Insight Id */
+            insight_id: string | null;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /**
+             * Horizon
+             * @enum {string}
+             */
+            horizon: "now" | "next" | "later";
+            /** Impact Score */
+            impact_score: number;
+            /** Confidence Score */
+            confidence_score: number;
+            /** Ease Score */
+            ease_score: number;
+            /** Ice Score */
+            ice_score: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** RoadmapPatch */
         RoadmapPatch: {
             /** Horizon */
@@ -1127,6 +2005,90 @@ export interface components {
         RunChartRequest: {
             spec: components["schemas"]["ChartSpec"];
         };
+        /** RunDetailOut */
+        RunDetailOut: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Status */
+            status: string;
+            /** Tokens */
+            tokens: number;
+            /** Events */
+            events: components["schemas"]["RunEventOut"][];
+        };
+        /** RunEventOut */
+        RunEventOut: {
+            /** Node */
+            node: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "done" | "error";
+            /** Model Used */
+            model_used: string | null;
+            /** Prompt */
+            prompt: string | null;
+            /** Input */
+            input: unknown;
+            /** Output */
+            output: unknown;
+            /** Tokens */
+            tokens: number | null;
+            /** Latency Ms */
+            latency_ms: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** RunSummaryOut */
+        RunSummaryOut: {
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Last Event At
+             * Format: date-time
+             */
+            last_event_at: string;
+            /** Tokens */
+            tokens: number;
+            /** Events */
+            events: number;
+            /** Status */
+            status: string;
+        };
+        /** ScenarioOut */
+        ScenarioOut: {
+            /**
+             * Estimate
+             * @constant
+             */
+            estimate: true;
+            assumptions: components["schemas"]["AssumptionsOut"];
+            /** Themes */
+            themes: components["schemas"]["ScenarioThemeOut"][];
+            /** Top Before */
+            top_before: string | null;
+            /** Top After */
+            top_after: string | null;
+            /** Narrative */
+            narrative: string | null;
+            /** Note */
+            note: string;
+        };
         /** ScenarioRequest */
         ScenarioRequest: {
             /** Segment Weights */
@@ -1140,6 +2102,46 @@ export interface components {
              * @default true
              */
             narrative: boolean;
+        };
+        /** ScenarioThemeOut */
+        ScenarioThemeOut: {
+            /** Theme Id */
+            theme_id: string;
+            /** Label */
+            label: string;
+            before: components["schemas"]["ImpactAtOut"];
+            after: components["schemas"]["ImpactAtOut"];
+            /** Impact Change */
+            impact_change: number;
+            /** Rank Change */
+            rank_change: number;
+        };
+        /** SearchHitOut */
+        SearchHitOut: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Resource Title */
+            resource_title: string;
+            /** Snippet */
+            snippet: string;
+            /** Start Offset */
+            start_offset: number;
+            /** End Offset */
+            end_offset: number;
+            /** Score */
+            score: number;
+            /** Similarity */
+            similarity: number | null;
+            /** Matched By */
+            matched_by: ("meaning" | "keywords")[];
         };
         /** SegmentIn */
         SegmentIn: {
@@ -1159,6 +2161,30 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** SegmentOut */
+        SegmentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "enterprise" | "mid_market" | "free" | "other";
+            /** Weight */
+            weight: number;
+            /** Description */
+            description: string | null;
+        };
         /** SegmentPatch */
         SegmentPatch: {
             /** Name */
@@ -1169,6 +2195,75 @@ export interface components {
             weight?: number | null;
             /** Description */
             description?: string | null;
+        };
+        /** SegmentUsageOut */
+        SegmentUsageOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "enterprise" | "mid_market" | "free" | "other";
+            /** Weight */
+            weight: number;
+            /** Description */
+            description: string | null;
+            /** Resources */
+            resources: number;
+            /** Insights */
+            insights: number;
+        };
+        /** SkippedOut */
+        SkippedOut: {
+            /** Segment */
+            segment: string;
+            /** Reason */
+            reason: string;
+        };
+        /** SourceOut */
+        SourceOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /** Title */
+            title: string;
+            /** Source Type */
+            source_type: string;
+            /** Source Url */
+            source_url: string | null;
+            /** Language */
+            language: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "staged" | "approved" | "rejected";
+            /** Segment Id */
+            segment_id: string | null;
+            /** Segment */
+            segment: string | null;
+            /** Analyzed At */
+            analyzed_at: string | null;
+            /** Rescored */
+            rescored: boolean;
         };
         /** SourcePatch */
         SourcePatch: {
@@ -1194,6 +2289,161 @@ export interface components {
             segment_column?: string | null;
             /** Segment Id */
             segment_id?: string | null;
+        };
+        /** StoredPrdOut */
+        StoredPrdOut: {
+            prd: components["schemas"]["PrdBodyOut"];
+            /** Evidence */
+            evidence: components["schemas"]["EvidenceOut"][];
+        };
+        /** TelemetryOut */
+        TelemetryOut: {
+            /** Calls */
+            calls: number;
+            /** Tokens */
+            tokens: number;
+            /** Fallbacks */
+            fallbacks: number;
+            /** By Model */
+            by_model: components["schemas"]["ModelUsageOut"][];
+        };
+        /** ThemeDetailOut */
+        ThemeDetailOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string | null;
+            /** Color */
+            color: string;
+            /** Frequency */
+            frequency: number;
+            /** Business Impact */
+            business_impact: number;
+            /** Insights */
+            insights: components["schemas"]["ThemeInsightOut"][];
+        };
+        /** ThemeInsightOut */
+        ThemeInsightOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Summary Text */
+            summary_text: string;
+            /** Use Case */
+            use_case: string | null;
+            /** Severity */
+            severity: number;
+            /**
+             * Sentiment
+             * @enum {string}
+             */
+            sentiment: "positive" | "neutral" | "negative";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pain_point" | "feature_request";
+            /** Confidence Score */
+            confidence_score: number | null;
+            /** Segment Id */
+            segment_id: string | null;
+            /** Segment */
+            segment: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Citations */
+            citations: components["schemas"]["QuoteOut"][];
+        };
+        /** ThemeRowOut */
+        ThemeRowOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string | null;
+            /** Color */
+            color: string;
+            /** Frequency */
+            frequency: number;
+            /** Business Impact */
+            business_impact: number;
+            /**
+             * Sentiment
+             * @enum {string}
+             */
+            sentiment: "positive" | "neutral" | "negative" | "mixed";
+            /** Sentiment Counts */
+            sentiment_counts: {
+                [key: string]: number;
+            };
+            /** Sentiment Net */
+            sentiment_net: number;
+            /** Average Severity */
+            average_severity: number | null;
+            /** Kinds */
+            kinds: {
+                [key: string]: number;
+            };
+            /** Sources */
+            sources: number;
+            /** Segments */
+            segments: components["schemas"]["ThemeSegmentOut"][];
+            /** Use Cases */
+            use_cases: components["schemas"]["UseCaseOut"][];
+        };
+        /** ThemeSegmentOut */
+        ThemeSegmentOut: {
+            /** Segment Id */
+            segment_id: string | null;
+            /** Name */
+            name: string;
+            /** Tier */
+            tier: string | null;
+            /** Insights */
+            insights: number;
+        };
+        /** TopThemeOut */
+        TopThemeOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Color */
+            color: string;
+            /** Frequency */
+            frequency: number;
+            /** Business Impact */
+            business_impact: number;
+        };
+        /** TrendOut */
+        TrendOut: {
+            /** Days */
+            days: number;
+            resources: components["schemas"]["PeriodCountOut"];
+            insights: components["schemas"]["PeriodCountOut"];
+            themes: components["schemas"]["PeriodCountOut"];
         };
         /** Turn */
         Turn: {
@@ -1228,6 +2478,24 @@ export interface components {
             /** Max Bytes */
             max_bytes: number;
         };
+        /** UseCaseOut */
+        UseCaseOut: {
+            /** Use Case */
+            use_case: string;
+            /** Insights */
+            insights: number;
+        };
+        /** UserStoryOut */
+        UserStoryOut: {
+            /** As A */
+            as_a: string;
+            /** I Want */
+            i_want: string;
+            /** So That */
+            so_that: string;
+            /** Evidence */
+            evidence: number[];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1241,6 +2509,24 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** WeekPointOut */
+        WeekPointOut: {
+            /** Week */
+            week: string;
+            /** Value */
+            value: number;
+            /** Partial */
+            partial: boolean;
+        };
+        /** WeightChangeOut */
+        WeightChangeOut: {
+            /** Segment */
+            segment: string;
+            /** From */
+            from: number;
+            /** To */
+            to: number;
+        };
         /** WorkspaceIn */
         WorkspaceIn: {
             /** Name */
@@ -1249,6 +2535,56 @@ export interface components {
             company: string;
             /** Industry */
             industry: string;
+            /** Domain */
+            domain?: string | null;
+            /** Target Audience */
+            target_audience?: string | null;
+            /** Owner Role */
+            owner_role?: string | null;
+        };
+        /** WorkspaceOut */
+        WorkspaceOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Company */
+            company: string;
+            /** Industry */
+            industry: string;
+            /** Domain */
+            domain: string | null;
+            /** Target Audience */
+            target_audience: string | null;
+            /** Owner Role */
+            owner_role: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Role */
+            role: string;
+            /** Campaigns */
+            campaigns: number;
+        };
+        /** WorkspacePatch */
+        WorkspacePatch: {
+            /** Name */
+            name?: string | null;
+            /** Company */
+            company?: string | null;
+            /** Industry */
+            industry?: string | null;
+            /** Domain */
+            domain?: string | null;
+            /** Target Audience */
+            target_audience?: string | null;
+            /** Owner Role */
+            owner_role?: string | null;
         };
     };
     responses: never;
@@ -1278,7 +2614,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ChatOut"];
                 };
             };
             /** @description Validation Error */
@@ -1312,7 +2648,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SearchHitOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    load_demo_sandbox_api_v1_campaigns__campaign_id__demo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoLoadedOut"];
                 };
             };
             /** @description Validation Error */
@@ -1443,7 +2810,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ResourceListItem"][];
                 };
             };
             /** @description Validation Error */
@@ -1474,7 +2841,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApprovedOut"];
                 };
             };
             /** @description Validation Error */
@@ -1505,7 +2872,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RejectedOut"];
                 };
             };
             /** @description Validation Error */
@@ -1569,7 +2936,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OpportunityMatrixOut"];
                 };
             };
             /** @description Validation Error */
@@ -1600,7 +2967,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PresetChartOut"][];
                 };
             };
             /** @description Validation Error */
@@ -1635,7 +3002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ChartOut"];
                 };
             };
             /** @description Validation Error */
@@ -1670,7 +3037,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PromptChartOut"];
                 };
             };
             /** @description Validation Error */
@@ -1701,7 +3068,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PersonaOut"][];
                 };
             };
             /** @description Validation Error */
@@ -1736,7 +3103,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PersonaOut"];
                 };
             };
             /** @description Validation Error */
@@ -1771,7 +3138,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["GeneratedPersonasOut"];
                 };
             };
             /** @description Validation Error */
@@ -1835,7 +3202,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PersonaOut"];
                 };
             };
             /** @description Validation Error */
@@ -1864,7 +3231,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PipelineOut"];
                 };
             };
         };
@@ -1906,7 +3273,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PrdOut"];
                 };
             };
             /** @description Validation Error */
@@ -1937,7 +3304,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PrdVersionOut"][];
                 };
             };
             /** @description Validation Error */
@@ -1968,7 +3335,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PrdOut"];
                 };
             };
             /** @description Validation Error */
@@ -2057,7 +3424,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IntegrationsOut"];
                 };
             };
         };
@@ -2079,7 +3446,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["JiraIssueOut"];
                 };
             };
             /** @description Validation Error */
@@ -2110,7 +3477,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ThemeRowOut"][];
                 };
             };
             /** @description Validation Error */
@@ -2141,7 +3508,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ThemeDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -2172,7 +3539,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ResourceDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -2207,7 +3574,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SourceOut"];
                 };
             };
             /** @description Validation Error */
@@ -2238,7 +3605,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RoadmapItemOut"][];
                 };
             };
             /** @description Validation Error */
@@ -2273,7 +3640,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RoadmapItemOut"];
                 };
             };
             /** @description Validation Error */
@@ -2304,7 +3671,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OverviewOut"];
                 };
             };
             /** @description Validation Error */
@@ -2368,7 +3735,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RunSummaryOut"][];
                 };
             };
             /** @description Validation Error */
@@ -2399,7 +3766,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RunDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -2434,7 +3801,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ForecastOut"];
                 };
             };
             /** @description Validation Error */
@@ -2469,7 +3836,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ScenarioOut"];
                 };
             };
             /** @description Validation Error */
@@ -2504,7 +3871,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BulkSegmentOut"];
                 };
             };
             /** @description Validation Error */
@@ -2533,7 +3900,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["WorkspaceOut"][];
                 };
             };
         };
@@ -2557,7 +3924,71 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["WorkspaceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_workspace_api_v1_workspaces__workspace_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_workspace_api_v1_workspaces__workspace_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspacePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceOut"];
                 };
             };
             /** @description Validation Error */
@@ -2588,7 +4019,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CampaignOut"][];
                 };
             };
             /** @description Validation Error */
@@ -2621,7 +4052,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CampaignDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -2652,7 +4083,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CampaignDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -2716,7 +4147,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CampaignOut"];
                 };
             };
             /** @description Validation Error */
@@ -2747,7 +4178,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SegmentUsageOut"][];
                 };
             };
             /** @description Validation Error */
@@ -2782,7 +4213,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SegmentOut"];
                 };
             };
             /** @description Validation Error */
@@ -2846,37 +4277,8 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SegmentOut"];
                 };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_workspace_api_v1_workspaces__workspace_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {

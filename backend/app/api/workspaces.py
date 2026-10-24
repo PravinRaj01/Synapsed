@@ -5,6 +5,7 @@ belong to, so a wrong or foreign id looks like "not found".
 """
 
 import logging
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -30,6 +31,68 @@ class WorkspaceIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     company: str = Field(min_length=1, max_length=120)
     industry: str = Field(min_length=1, max_length=120)
+    domain: str | None = Field(None, max_length=300)  # what the product does
+    target_audience: str | None = Field(None, max_length=300)
+    owner_role: str | None = Field(None, max_length=120)  # the creator's job title
+
+
+class WorkspacePatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    company: str | None = Field(None, min_length=1, max_length=120)
+    industry: str | None = Field(None, min_length=1, max_length=120)
+    domain: str | None = Field(None, max_length=300)
+    target_audience: str | None = Field(None, max_length=300)
+    owner_role: str | None = Field(None, max_length=120)
+
+
+class WorkspaceOut(BaseModel):
+    id: UUID
+    name: str
+    company: str
+    industry: str
+    domain: str | None
+    target_audience: str | None
+    owner_role: str | None
+    created_at: datetime
+    role: str  # the caller's role here: owner | pm | researcher | viewer
+    campaigns: int
+
+
+class SegmentOut(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    name: str
+    tier: Tier
+    weight: float
+    description: str | None
+
+
+class SegmentUsageOut(SegmentOut):
+    resources: int
+    insights: int
+
+
+class CampaignOut(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    name: str
+    goal: str | None
+    created_at: datetime
+    resources: int
+    staged: int
+    insights: int
+    themes: int
+
+
+class CampaignDetailOut(CampaignOut):
+    segments: list[SegmentOut]
+
+
+WORKSPACE_SELECT = """
+    select w.id, w.name, w.company, w.industry, w.domain, w.target_audience, w.owner_role, w.created_at, m.role,
+           (select count(*) from campaigns c where c.workspace_id = w.id) as campaigns
+    from workspaces w join workspace_members m on m.workspace_id = w.id and m.user_id = %s
+"""
 
 
 class SegmentIn(BaseModel):
@@ -122,30 +185,44 @@ def _insert_segment(conn: psycopg.Connection, campaign_id: UUID, segment: Segmen
 
 # ---------------------------------------------------------------- workspaces
 
-@router.post("/workspaces", status_code=201)
+@router.post("/workspaces", status_code=201, response_model=WorkspaceOut)
 def create_workspace(body: WorkspaceIn, user: AuthUser = Depends(current_user)):
     with user_tx(user.id) as conn:
         workspace_id = conn.execute(
             "select create_workspace(%s, %s, %s) as id", (body.name, body.company, body.industry)
         ).fetchone()["id"]
-    return {"id": workspace_id, **body.model_dump(), "role": "owner", "campaigns": 0}
+        conn.execute(
+            "update workspaces set domain = %s, target_audience = %s, owner_role = %s where id = %s",
+            (body.domain, body.target_audience, body.owner_role, workspace_id),
+        )
+        return conn.execute(WORKSPACE_SELECT + " where w.id = %s", (user.id, workspace_id)).fetchone()
 
 
-@router.get("/workspaces")
+@router.get("/workspaces", response_model=list[WorkspaceOut])
 def list_workspaces(user: AuthUser = Depends(current_user)):
     with user_tx(user.id) as conn:
-        return conn.execute(
-            """select w.id, w.name, w.company, w.industry, w.created_at, m.role,
-                      (select count(*) from campaigns c where c.workspace_id = w.id) as campaigns
-               from workspaces w join workspace_members m on m.workspace_id = w.id and m.user_id = %s
-               order by w.created_at""",
-            (user.id,),
-        ).fetchall()
+        return conn.execute(WORKSPACE_SELECT + " order by w.created_at", (user.id,)).fetchall()
+
+
+@router.patch("/workspaces/{workspace_id}", response_model=WorkspaceOut)
+def update_workspace(workspace_id: UUID, body: WorkspacePatch, user: AuthUser = Depends(current_user)):
+    """Edit the business profile. Any field may be cleared except the three required ones."""
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(422, "Nothing to change")
+    if any(changes.get(k, 0) is None for k in ("name", "company", "industry")):
+        raise HTTPException(422, "name, company and industry cannot be empty")
+    sets = ", ".join(f"{column} = %s" for column in changes)  # column names come from the model, never from the client
+    with user_tx(user.id) as conn:
+        row = conn.execute(f"update workspaces set {sets} where id = %s returning id", (*changes.values(), workspace_id)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Workspace not found")
+        return conn.execute(WORKSPACE_SELECT + " where w.id = %s", (user.id, workspace_id)).fetchone()
 
 
 # ---------------------------------------------------------------- campaigns
 
-@router.post("/campaigns", status_code=201)
+@router.post("/campaigns", status_code=201, response_model=CampaignDetailOut)
 def create_campaign(body: CampaignIn, user: AuthUser = Depends(current_user)):
     """Create a campaign, optionally with its starting customer segments."""
     _unique_names(body.segments)
@@ -161,7 +238,7 @@ def create_campaign(body: CampaignIn, user: AuthUser = Depends(current_user)):
     return {**campaign, "segments": segments}
 
 
-@router.get("/campaigns")
+@router.get("/campaigns", response_model=list[CampaignOut])
 def list_campaigns(workspace_id: UUID | None = None, user: AuthUser = Depends(current_user)):
     with user_tx(user.id) as conn:
         return conn.execute(
@@ -170,7 +247,7 @@ def list_campaigns(workspace_id: UUID | None = None, user: AuthUser = Depends(cu
         ).fetchall()
 
 
-@router.get("/campaigns/{campaign_id}")
+@router.get("/campaigns/{campaign_id}", response_model=CampaignDetailOut)
 def get_campaign(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     with user_tx(user.id) as conn:
         campaign = conn.execute(CAMPAIGN_SELECT + " where c.id = %s", (campaign_id,)).fetchone()
@@ -183,7 +260,7 @@ def get_campaign(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     return {**campaign, "segments": segments}
 
 
-@router.patch("/campaigns/{campaign_id}")
+@router.patch("/campaigns/{campaign_id}", response_model=CampaignOut)
 def update_campaign(campaign_id: UUID, body: CampaignPatch, user: AuthUser = Depends(current_user)):
     changes = body.model_dump(exclude_unset=True)
     if not changes:
@@ -203,7 +280,7 @@ def update_campaign(campaign_id: UUID, body: CampaignPatch, user: AuthUser = Dep
 
 # ---------------------------------------------------------------- segments
 
-@router.get("/campaigns/{campaign_id}/segments")
+@router.get("/campaigns/{campaign_id}/segments", response_model=list[SegmentUsageOut])
 def list_segments(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     require_campaign(user.id, campaign_id)
     with user_tx(user.id) as conn:
@@ -216,7 +293,7 @@ def list_segments(campaign_id: UUID, user: AuthUser = Depends(current_user)):
         ).fetchall()
 
 
-@router.post("/campaigns/{campaign_id}/segments", status_code=201)
+@router.post("/campaigns/{campaign_id}/segments", status_code=201, response_model=SegmentOut)
 def create_segment(campaign_id: UUID, body: SegmentIn, user: AuthUser = Depends(current_user)):
     require_campaign(user.id, campaign_id)
     with user_tx(user.id) as conn:
@@ -226,7 +303,7 @@ def create_segment(campaign_id: UUID, body: SegmentIn, user: AuthUser = Depends(
         return _insert_segment(conn, campaign_id, body)
 
 
-@router.patch("/segments/{segment_id}")
+@router.patch("/segments/{segment_id}", response_model=SegmentOut)
 def update_segment(segment_id: UUID, body: SegmentPatch, user: AuthUser = Depends(current_user)):
     changes = body.model_dump(exclude_unset=True)
     if not changes:

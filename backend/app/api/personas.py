@@ -27,6 +27,54 @@ PERSONA_SELECT = """
 """
 
 
+class PersonaQuoteOut(BaseModel):
+    quote: str
+    summary: str
+    resource_id: UUID
+    resource_title: str
+    start_offset: int
+    end_offset: int
+
+
+class PersonaAttributesOut(BaseModel):
+    """What generation stores; a persona written by hand only has generated=false."""
+    generated: bool = False
+    goals: list[str] = []
+    frustrations: list[str] = []
+    behaviours: list[str] = []
+    typical_use_cases: list[str] = []
+    quotes: list[PersonaQuoteOut] = []
+    insight_count: int | None = None
+    evidence_used: int | None = None
+
+
+class PersonaOut(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    segment_id: UUID | None
+    segment: str | None
+    tier: str | None
+    name: str
+    description: str
+    attributes: PersonaAttributesOut
+
+
+class SkippedOut(BaseModel):
+    segment: str
+    reason: str
+
+
+class FailedOut(BaseModel):
+    segment: str
+    error: str
+
+
+class GeneratedPersonasOut(BaseModel):
+    personas: list[PersonaOut]
+    skipped: list[SkippedOut]
+    failed: list[FailedOut]
+
+
 class GenerateRequest(BaseModel):
     segment_ids: list[UUID] | None = Field(None, max_length=MAX_SEGMENTS_PER_RUN)  # default: every segment with enough insights
 
@@ -47,14 +95,14 @@ def call_llm(messages: list[dict]) -> Completion:
     return complete(messages, chain_for("en"), max_tokens=900)
 
 
-@router.get("/campaigns/{campaign_id}/personas")
+@router.get("/campaigns/{campaign_id}/personas", response_model=list[PersonaOut])
 def list_personas(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     require_campaign(user.id, campaign_id)
     with user_tx(user.id) as conn:
         return conn.execute(PERSONA_SELECT + " where p.campaign_id = %s order by s.name nulls last, p.name", (campaign_id,)).fetchall()
 
 
-@router.post("/campaigns/{campaign_id}/personas", status_code=201)
+@router.post("/campaigns/{campaign_id}/personas", status_code=201, response_model=PersonaOut)
 def create_persona(campaign_id: UUID, body: PersonaIn, user: AuthUser = Depends(current_user)):
     """Add a persona by hand (the PM knows something the data does not)."""
     require_campaign(user.id, campaign_id)
@@ -70,7 +118,7 @@ def create_persona(campaign_id: UUID, body: PersonaIn, user: AuthUser = Depends(
         return conn.execute(PERSONA_SELECT + " where p.id = %s", (persona_id,)).fetchone()
 
 
-@router.post("/campaigns/{campaign_id}/personas/generate")
+@router.post("/campaigns/{campaign_id}/personas/generate", response_model=GeneratedPersonasOut)
 def generate_personas(campaign_id: UUID, body: GenerateRequest | None = None, user: AuthUser = Depends(limited("personas"))):
     """Write a persona for each segment that has enough insights, replacing the previously generated one.
 
@@ -121,7 +169,7 @@ def generate_personas(campaign_id: UUID, body: GenerateRequest | None = None, us
     return {"personas": created, "skipped": skipped, "failed": failed}
 
 
-@router.patch("/personas/{persona_id}")
+@router.patch("/personas/{persona_id}", response_model=PersonaOut)
 def update_persona(persona_id: UUID, body: PersonaPatch, user: AuthUser = Depends(current_user)):
     changes = body.model_dump(exclude_unset=True)
     if not changes:

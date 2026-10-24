@@ -4,6 +4,7 @@ Everything runs under the signed-in user's row-level security, so a foreign id i
 """
 
 from collections import Counter, defaultdict
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -21,7 +22,192 @@ router = APIRouter(prefix="/api/v1", tags=["report"])
 TOP_USE_CASES = 5
 TOP_THEMES = 5
 RECENT = 5
+TREND_DAYS = 7
 MAX_THEME_INSIGHTS = 200
+
+
+# ---------------------------------------------------------------- response shapes
+
+class ThemeSegmentOut(BaseModel):
+    segment_id: str | None
+    name: str
+    tier: str | None
+    insights: int
+
+
+class UseCaseOut(BaseModel):
+    use_case: str
+    insights: int
+
+
+class ThemeRowOut(BaseModel):
+    id: UUID
+    label: str
+    description: str | None
+    color: str
+    frequency: int
+    business_impact: float  # 0-100, relative to the campaign's strongest theme
+    sentiment: Literal["positive", "neutral", "negative", "mixed"]
+    sentiment_counts: dict[str, int]
+    sentiment_net: float  # -1 to 1
+    average_severity: float | None
+    kinds: dict[str, int]
+    sources: int  # distinct sources that mention the theme
+    segments: list[ThemeSegmentOut]
+    use_cases: list[UseCaseOut]
+
+
+class QuoteOut(BaseModel):
+    resource_id: UUID
+    resource_title: str
+    chunk_id: UUID | None
+    text_snippet: str
+    start_offset: int
+    end_offset: int
+
+
+class ThemeInsightOut(BaseModel):
+    id: UUID
+    summary_text: str
+    use_case: str | None
+    severity: int
+    sentiment: Literal["positive", "neutral", "negative"]
+    kind: Literal["pain_point", "feature_request"]
+    confidence_score: float | None
+    segment_id: UUID | None
+    segment: str | None
+    created_at: datetime
+    citations: list[QuoteOut]
+
+
+class ThemeDetailOut(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    label: str
+    description: str | None
+    color: str
+    frequency: int
+    business_impact: float
+    insights: list[ThemeInsightOut]
+
+
+class HighlightOut(BaseModel):
+    citation_id: UUID
+    insight_id: UUID
+    start_offset: int
+    end_offset: int
+    text_snippet: str
+    insight: str
+    theme_id: UUID | None
+    theme: str | None
+    color: str | None
+
+
+class ResourceDetailOut(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    title: str
+    source_type: str
+    source_url: str | None
+    language: str | None
+    status: Literal["staged", "approved", "rejected"]
+    content: str
+    summary: str | None
+    pii_redacted: bool
+    pii_note: str | None
+    segment_id: UUID | None
+    segment: str | None
+    analyzed_at: datetime | None
+    created_at: datetime
+    highlights: list[HighlightOut]
+
+
+class RoadmapItemOut(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    theme_id: UUID | None
+    theme: str | None
+    color: str | None
+    insight_id: UUID | None
+    title: str
+    description: str
+    horizon: Literal["now", "next", "later"]
+    impact_score: int
+    confidence_score: int
+    ease_score: int
+    ice_score: int
+    created_at: datetime
+
+
+class ResourceCountsOut(BaseModel):
+    total: int
+    staged: int
+    approved: int
+    rejected: int
+    waiting_for_analysis: int
+
+
+class TopThemeOut(BaseModel):
+    id: UUID
+    label: str
+    color: str
+    frequency: int
+    business_impact: float
+
+
+class RecentResourceOut(BaseModel):
+    id: UUID
+    title: str
+    source_type: str
+    status: str
+    language: str | None
+    created_at: datetime
+
+
+class LastRunOut(BaseModel):
+    run_id: UUID
+    started_at: datetime
+    status: str  # running | done | error | stalled
+
+
+class ModelUsageOut(BaseModel):
+    model_used: str
+    calls: int
+    tokens: int
+    fallbacks: int
+
+
+class TelemetryOut(BaseModel):
+    calls: int
+    tokens: int
+    fallbacks: int
+    by_model: list[ModelUsageOut]
+
+
+class PeriodCountOut(BaseModel):
+    current: int
+    previous: int
+
+
+class TrendOut(BaseModel):
+    days: int
+    resources: PeriodCountOut
+    insights: PeriodCountOut
+    themes: PeriodCountOut
+
+
+class OverviewOut(BaseModel):
+    resources: ResourceCountsOut
+    insights: int
+    themes: int
+    roadmap_items: int
+    segments: int
+    sentiment: dict[str, int]
+    trend: TrendOut
+    top_themes: list[TopThemeOut]
+    recent_resources: list[RecentResourceOut]
+    last_run: LastRunOut | None
+    telemetry: TelemetryOut
 
 
 # ---------------------------------------------------------------- themes (the Problem Space Report)
@@ -55,7 +241,7 @@ def build_theme_rows(themes: list[dict], insights: list[dict], sources: dict[str
     return sorted(rows, key=lambda r: (-float(r["business_impact"]), -r["frequency"], r["label"]))
 
 
-@router.get("/campaigns/{campaign_id}/themes")
+@router.get("/campaigns/{campaign_id}/themes", response_model=list[ThemeRowOut])
 def list_themes(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     """The Problem Space Report: themes with frequency, Business Impact, sentiment, segments and use cases."""
     require_campaign(user.id, campaign_id)
@@ -85,7 +271,7 @@ def list_themes(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     return build_theme_rows(themes, insights, sources, segments)
 
 
-@router.get("/themes/{theme_id}")
+@router.get("/themes/{theme_id}", response_model=ThemeDetailOut)
 def get_theme(theme_id: UUID, user: AuthUser = Depends(current_user)):
     """A theme with its insights and, for each, the quotes that back it up."""
     with user_tx(user.id) as conn:
@@ -118,7 +304,7 @@ def get_theme(theme_id: UUID, user: AuthUser = Depends(current_user)):
 
 # ---------------------------------------------------------------- resource viewer
 
-@router.get("/resources/{resource_id}")
+@router.get("/resources/{resource_id}", response_model=ResourceDetailOut)
 def get_resource(resource_id: UUID, user: AuthUser = Depends(current_user)):
     """A resource's text with every quote to highlight in it, coloured by theme."""
     with user_tx(user.id) as conn:
@@ -169,7 +355,7 @@ class RoadmapPatch(BaseModel):
         return " ".join(value.split()) if value else value
 
 
-@router.get("/campaigns/{campaign_id}/roadmap")
+@router.get("/campaigns/{campaign_id}/roadmap", response_model=list[RoadmapItemOut])
 def list_roadmap(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     """The board: every item with its ICE score, highest first. The client groups them by horizon."""
     require_campaign(user.id, campaign_id)
@@ -177,7 +363,7 @@ def list_roadmap(campaign_id: UUID, user: AuthUser = Depends(current_user)):
         return conn.execute(ROADMAP_SELECT + " where r.campaign_id = %s order by r.ice_score desc, r.title", (campaign_id,)).fetchall()
 
 
-@router.patch("/roadmap/{item_id}")
+@router.patch("/roadmap/{item_id}", response_model=RoadmapItemOut)
 def update_roadmap_item(item_id: UUID, body: RoadmapPatch, user: AuthUser = Depends(current_user)):
     """Move a card or correct a score. ICE is recomputed by the database."""
     changes = body.model_dump(exclude_unset=True)
@@ -195,7 +381,7 @@ def update_roadmap_item(item_id: UUID, body: RoadmapPatch, user: AuthUser = Depe
 
 # ---------------------------------------------------------------- dashboard
 
-@router.get("/campaigns/{campaign_id}/overview")
+@router.get("/campaigns/{campaign_id}/overview", response_model=OverviewOut)
 def overview(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     """Everything the dashboard shows in one call."""
     require_campaign(user.id, campaign_id)
@@ -215,6 +401,14 @@ def overview(campaign_id: UUID, user: AuthUser = Depends(current_user)):
                       (select count(*) from themes where campaign_id = %(c)s) as themes,
                       (select count(*) from roadmap_items where campaign_id = %(c)s) as roadmap_items,
                       (select count(*) from segments where campaign_id = %(c)s) as segments""", {"c": campaign_id}).fetchone()
+        trend = conn.execute(
+            """select table_name, count(*) filter (where created_at >= now() - make_interval(days => %(d)s)) as current,
+                      count(*) filter (where created_at < now() - make_interval(days => %(d)s)
+                                         and created_at >= now() - make_interval(days => 2 * %(d)s)) as previous
+               from (select 'resources' as table_name, created_at from resources where campaign_id = %(c)s
+                     union all select 'insights', created_at from insights where campaign_id = %(c)s
+                     union all select 'themes', created_at from themes where campaign_id = %(c)s) t
+               group by table_name""", {"c": campaign_id, "d": TREND_DAYS}).fetchall()
         recent = conn.execute(
             "select id, title, source_type, status, language, created_at from resources where campaign_id = %s "
             "order by created_at desc limit %s", (campaign_id, RECENT)).fetchall()
@@ -234,6 +428,9 @@ def overview(campaign_id: UUID, user: AuthUser = Depends(current_user)):
                       "waiting_for_analysis": waiting},
         **totals,
         "sentiment": {s: sentiment.get(s, 0) for s in ("positive", "neutral", "negative")},
+        # How many were added in the last TREND_DAYS days against the TREND_DAYS before, so KPI cards can show % change.
+        "trend": {"days": TREND_DAYS, **{name: {"current": 0, "previous": 0} for name in ("resources", "insights", "themes")},
+                  **{t["table_name"]: {"current": t["current"], "previous": t["previous"]} for t in trend}},
         "top_themes": top_themes,
         "recent_resources": recent,
         "last_run": None if last_run is None else {

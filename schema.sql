@@ -10,6 +10,9 @@ create table workspaces (
     name text not null,
     company text not null,
     industry text not null,
+    domain text,                              -- what the product does, from onboarding
+    target_audience text,                     -- who it is for, from onboarding
+    owner_role text,                          -- the creator's job title, from onboarding
     created_at timestamptz default timezone('utc', now()) not null
 );
 
@@ -351,3 +354,8 @@ grant select, insert, update, delete on all tables in schema public to synapsed_
 grant execute on all functions in schema public to synapsed_app;
 alter default privileges in schema public
     grant select, insert, update, delete on tables to synapsed_app;
+
+-- 16. Onboarding profile (for databases created before these columns existed)
+alter table workspaces add column if not exists domain text;
+alter table workspaces add column if not exists target_audience text;
+alter table workspaces add column if not exists owner_role text;

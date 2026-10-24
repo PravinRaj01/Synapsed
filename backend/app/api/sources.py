@@ -5,6 +5,8 @@ what personas and the segment charts group by. So changing it on a source that w
 updates that source's insights and recalculates the scores that depend on it.
 """
 
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -41,6 +43,26 @@ class BulkSegment(BaseModel):
     segment_id: UUID | None = None  # null clears the segment
 
 
+class SourceOut(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    title: str
+    source_type: str
+    source_url: str | None
+    language: str | None
+    status: Literal["staged", "approved", "rejected"]
+    segment_id: UUID | None
+    segment: str | None
+    analyzed_at: datetime | None
+    rescored: bool  # true when the change moved insights and Business Impact was recalculated
+
+
+class BulkSegmentOut(BaseModel):
+    updated: int
+    segment_id: UUID | None
+    rescored: bool
+
+
 def apply_segment(conn, campaign_id, resource_ids: list, segment_id) -> bool:
     """Set the segment on sources, carry it to the insights quoted from them, and recalculate dependent scores.
 
@@ -70,7 +92,7 @@ def _check_segment(conn, campaign_id, segment_id) -> None:
         raise HTTPException(422, "That segment is not part of this campaign")
 
 
-@router.patch("/resources/{resource_id}")
+@router.patch("/resources/{resource_id}", response_model=SourceOut)
 def update_source(resource_id: UUID, body: SourcePatch, user: AuthUser = Depends(current_user)):
     """Rename a source and/or set (or clear, with null) its customer segment."""
     changes = body.model_fields_set
@@ -91,7 +113,7 @@ def update_source(resource_id: UUID, body: SourcePatch, user: AuthUser = Depends
         return {**conn.execute(SOURCE_SELECT + " where r.id = %s", (resource_id,)).fetchone(), "rescored": rescored}
 
 
-@router.post("/campaigns/{campaign_id}/resources/segment")
+@router.post("/campaigns/{campaign_id}/resources/segment", response_model=BulkSegmentOut)
 def assign_segment(campaign_id: UUID, body: BulkSegment, user: AuthUser = Depends(current_user)):
     """Give many sources the same customer segment (or clear it) in one step."""
     require_campaign(user.id, campaign_id)
