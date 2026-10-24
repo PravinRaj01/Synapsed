@@ -17,7 +17,7 @@ logger = logging.getLogger("synapsed.extraction")
 
 MAX_WINDOW_CHARS = 6000  # about 2,000 tokens; keeps one call well inside the free tiers
 WINDOW_OVERLAP = 400
-MAX_QUOTE_CHARS = 600
+MAX_QUOTE_CHARS = 600  # longer than this is cut back to its first part (spoken text has no sentence ends)
 KINDS = {"pain_point", "feature_request"}
 SENTIMENTS = {"positive", "neutral", "negative"}
 
@@ -26,11 +26,12 @@ Extract what the CUSTOMER says: pain points (problems, frustrations, workarounds
 
 Rules:
 - Only extract what the customer clearly states. Do not infer problems that are not stated. Ignore praise, greetings, small talk and anything the interviewer says.
-- "quote": copy 1-2 consecutive sentences from the text EXACTLY, character for character, in the original language, at most 300 characters. Never translate, fix or join separate sentences.
+- "quote": copy one or two short consecutive sentences or clauses from the text EXACTLY, character for character, in the original language, at most 300 characters. Spoken transcripts often have no punctuation: still pick one short stretch (about 200 characters) that states the problem, never a long passage. Never translate, fix or join separate parts.
+- Report EVERY distinct pain point or request the customer states, one item each. A long interview usually has several; do not stop after the first.
 - "pain_point": one standalone sentence IN ENGLISH describing the problem or request, understandable without the quote, with no personal names (the text contains placeholders such as <PERSON> where names were removed; never invent names).
 - "use_case": a short English phrase for what the customer was trying to do (for example "monthly reporting").
 - "severity": 1 (minor annoyance) to 5 (blocks their work or risks them leaving).
-- "sentiment": negative, neutral or positive.
+- "sentiment": the customer's feeling about the problem or situation they describe: negative, neutral or positive. It is not a rating of any product, unless the customer is talking about one.
 - "kind": "pain_point" or "feature_request".
 - If the text states nothing relevant, return {"items": []}.
 
@@ -75,6 +76,15 @@ def _clean_int(value, default: int = 3) -> int:
         return default
 
 
+def shorten_quote(quote: str) -> str:
+    """Cut an over-long quote back to its first part, at a word boundary. The start of a verbatim quote is still verbatim."""
+    quote = quote.strip()
+    if len(quote) <= MAX_QUOTE_CHARS:
+        return quote
+    cut = quote[:MAX_QUOTE_CHARS]
+    return cut.rsplit(" ", 1)[0] if " " in cut else cut
+
+
 def validate_items(raw: object, window_text: str, window_start: int, dropped: Counter) -> list[Item]:
     """Turn the model's JSON into items whose quotes are verified against the window text."""
     entries = raw.get("items") if isinstance(raw, dict) else raw
@@ -86,10 +96,7 @@ def validate_items(raw: object, window_text: str, window_start: int, dropped: Co
         if not isinstance(entry, dict) or not str(entry.get("pain_point", "")).strip() or not entry.get("quote"):
             dropped["bad_shape"] += 1
             continue
-        quote = str(entry["quote"])
-        if len(quote) > MAX_QUOTE_CHARS:
-            dropped["quote_too_long"] += 1
-            continue
+        quote = shorten_quote(str(entry["quote"]))
         match = locate_quote(window_text, quote)
         if match is None:
             dropped["quote_not_found"] += 1

@@ -44,6 +44,21 @@ def test_invented_or_reworded_quotes_are_not_found():
     assert locate_quote(TEXT, "Every month I export five CSV files and stitch them") is None
 
 
+def test_a_quote_shortened_with_an_ellipsis_still_counts_if_every_piece_is_in_the_text():
+    ellipsis_quote = "Every month I export four CSV files... The export also times out whenever an account has more than ten thousand rows"
+    match = locate_quote(TEXT, ellipsis_quote)
+    assert match and TEXT[match.start : match.end] == "Every month I export four CSV files"
+    trailing = locate_quote(TEXT, "The export also times out whenever an account has more...")
+    assert trailing and TEXT[trailing.start : trailing.end].startswith("The export also times out")
+    unicode_dots = locate_quote(TEXT, "…The export also times out whenever an account has more than ten thousand rows…")
+    assert unicode_dots and TEXT[unicode_dots.start : unicode_dots.end].endswith("ten thousand rows")
+
+
+def test_an_ellipsis_does_not_launder_an_invented_piece_or_the_wrong_order():
+    assert locate_quote(TEXT, "Every month I export four CSV files... and then the whole company cheers loudly") is None
+    assert locate_quote(TEXT, "The export also times out whenever an account... Every month I export four CSV files") is None
+
+
 def test_very_short_quotes_are_rejected():
     assert locate_quote(TEXT, "export") is None
     assert locate_quote(TEXT, "  day.  ") is None
@@ -101,10 +116,28 @@ def test_enums_and_numbers_are_normalised():
     assert (items[0].kind, items[0].severity, items[0].sentiment) == ("pain_point", 3, "positive")
 
 
-def test_overlong_quotes_are_dropped():
-    long_text = "word " * 400
-    items, dropped = validate({"items": [entry(quote=long_text.strip())]}, window=long_text)
-    assert items == [] and dropped["quote_too_long"] == 1
+def test_overlong_quotes_are_cut_back_to_their_first_part_not_dropped():
+    # Spoken transcripts have no sentence ends, so a "sentence" can run on for pages.
+    long_text = " ".join(f"word{i}" for i in range(400))
+    items, dropped = validate({"items": [entry(quote=long_text)]}, window=long_text)
+    assert len(items) == 1 and not dropped
+    assert 0 < len(items[0].quote) <= ex.MAX_QUOTE_CHARS
+    assert long_text.startswith(items[0].quote) and not items[0].quote.endswith("wor")  # whole words, still verbatim
+    assert items[0].start == 0 and items[0].end == len(items[0].quote)
+
+
+def test_an_overlong_quote_that_is_not_in_the_text_is_still_dropped():
+    long_text = " ".join(f"word{i}" for i in range(400))
+    invented = " ".join(f"other{i}" for i in range(400))
+    items, dropped = validate({"items": [entry(quote=invented)]}, window=long_text)
+    assert items == [] and dropped["quote_not_found"] == 1
+
+
+def test_shorten_quote_leaves_short_quotes_alone_and_cuts_at_a_word():
+    assert ex.shorten_quote("  a short quote  ") == "a short quote"
+    cut = ex.shorten_quote("lorem " * 200)
+    assert len(cut) <= ex.MAX_QUOTE_CHARS and cut.endswith("lorem")
+    assert len(ex.shorten_quote("x" * 1000)) == ex.MAX_QUOTE_CHARS  # no spaces to cut at
 
 
 def test_merge_windows_removes_duplicates_from_overlapping_windows():
