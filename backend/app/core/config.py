@@ -67,14 +67,17 @@ class Settings(BaseSettings):
     jira_project_key: str = ""
     jira_issue_type: str = "Task"
 
-    # CORS: the deployed frontend origin (and the local dev server).
+    # CORS: the deployed frontend origin(s), separated by commas (the app can be opened from more than one Vercel
+    # address), and the local dev server.
     frontend_origin: str = ""
 
     @property
     def cors_origins(self) -> list[str]:
         origins = ["http://localhost:5173"]
-        if self.frontend_origin:
-            origins.append(self.frontend_origin.rstrip("/"))
+        for origin in self.frontend_origin.split(","):
+            origin = origin.strip().rstrip("/")
+            if origin and origin not in origins:
+                origins.append(origin)
         return origins
 
 
