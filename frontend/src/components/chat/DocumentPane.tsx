@@ -3,6 +3,7 @@ import type { Focus } from '@/lib/chat'
 import { useSourceDetail } from '@/lib/vault'
 import { SOURCE_TYPE_LABEL } from '@/lib/vaultLogic'
 import { HighlightedText } from '@/components/vault/HighlightedText'
+import { DocumentSkeleton, Loading } from '@/components/ui/Skeleton'
 
 export type OpenDoc = { id: string; focus: Focus | null; key: number }
 
@@ -36,7 +37,7 @@ export function DocumentPane({ doc }: { doc: OpenDoc | null }) {
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {isLoading && <div role="status" aria-label="Loading source" className="h-48 animate-pulse rounded-inner bg-inner" />}
+        {isLoading && <Loading label="Loading source"><DocumentSkeleton /></Loading>}
         {isError && (
           <p role="alert" className="text-sm text-negative">
             {error.message}{' '}

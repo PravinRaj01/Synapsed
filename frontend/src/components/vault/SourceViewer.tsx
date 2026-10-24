@@ -7,6 +7,7 @@ import { inputClass } from '@/components/ui/Field'
 import { useApprove, useReject, useSourceDetail, useUpdateSource, type Segment } from '@/lib/vault'
 import { SOURCE_TYPE_LABEL } from '@/lib/vaultLogic'
 import { HighlightedText } from './HighlightedText'
+import { DocumentSkeleton, Loading } from '@/components/ui/Skeleton'
 
 /** A source's text with every quote that backs a pain point highlighted in its theme's colour, plus the actions for it. */
 export function SourceViewer({ id, segments, onClose }: { id: string | null; segments: Segment[]; onClose: () => void }) {
@@ -42,7 +43,7 @@ export function SourceViewer({ id, segments, onClose }: { id: string | null; seg
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-5">
-            {isLoading && <div role="status" aria-label="Loading source" className="h-40 animate-pulse rounded-inner bg-inner" />}
+            {isLoading && <Loading label="Loading source"><DocumentSkeleton /></Loading>}
             {isError && <p role="alert" className="text-sm text-negative">{error.message}</p>}
             {source && (
               <>

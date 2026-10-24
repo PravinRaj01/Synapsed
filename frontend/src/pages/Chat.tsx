@@ -13,6 +13,7 @@ import { useDeepChat, type Focus } from '@/lib/chat'
 import { useExtraWide } from '@/lib/useWide'
 import { useSources } from '@/lib/vault'
 import { useCampaign } from '@/stores/campaign'
+import { DocumentSkeleton, FadeIn, Loading, RowsSkeleton, Skeleton, SkeletonCard } from '@/components/ui/Skeleton'
 
 type Pane = 'chat' | 'doc' | 'sources'
 
@@ -48,7 +49,23 @@ export default function Chat() {
   const header = <PageHeader title="Deep Workspace" subtitle="Ask questions of your sources and get answers with verified quotes." />
 
   if (campaigns.isLoading || (campaign && sources.isLoading)) {
-    return <>{header}<div role="status" aria-label="Loading" className="h-96 animate-pulse rounded-card bg-card shadow-card" /></>
+    return (
+      <>
+        {header}
+        <Loading label="Loading">
+          <SkeletonCard className="grid h-96 grid-cols-1 gap-6 p-0 xl:grid-cols-[16rem_1fr_1fr]">
+            <RowsSkeleton rows={5} className="px-5" />
+            <div className="space-y-4 p-5">
+              <Skeleton className="ml-auto h-10 w-2/3 rounded-2xl" />
+              <Skeleton className="h-28 w-5/6 rounded-2xl" />
+            </div>
+            <div className="hidden p-5 xl:block">
+              <DocumentSkeleton />
+            </div>
+          </SkeletonCard>
+        </Loading>
+      </>
+    )
   }
   const failed = campaigns.isError ? campaigns : sources.isError ? sources : null
   if (failed) {
@@ -87,11 +104,13 @@ export default function Chat() {
     <>
       {header}
       {wide ? (
+        <FadeIn>
         <Card className="grid h-[calc(100dvh-12rem)] min-h-[34rem] grid-cols-[16rem_minmax(0,1fr)_minmax(0,1fr)] divide-x divide-line overflow-hidden p-0">
           <div className="min-h-0">{sourcesPane}</div>
           <div className="min-h-0">{chatPane}</div>
           <div className="min-h-0">{docPane}</div>
         </Card>
+        </FadeIn>
       ) : (
         <div className="space-y-3">
           <SegmentedControl<Pane> label="Workspace view" value={pane} onChange={setPane} options={[{ value: 'chat', label: 'Chat' }, { value: 'doc', label: 'Document' }, { value: 'sources', label: `Sources (${ticked.length})` }]} />

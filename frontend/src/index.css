@@ -161,3 +161,37 @@
     box-shadow: none !important;
   }
 }
+
+/* Placeholders for content that is still loading: a pale block with a soft light sweeping across it. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--card-inner);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 7%, transparent), transparent);
+  animation: skeleton-sweep 1.5s ease-in-out infinite;
+}
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Printing a PRD from its panel: only the PRD, on a plain page. */
+#prd-print {
+  display: none;
+}
+@media print {
+  body[data-printing='prd'] > *:not(#prd-print) {
+    display: none !important;
+  }
+  body[data-printing='prd'] #prd-print {
+    display: block;
+    color: #000;
+  }
+}

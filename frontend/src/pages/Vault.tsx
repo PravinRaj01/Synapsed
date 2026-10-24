@@ -15,6 +15,7 @@ import { useCampaigns } from '@/lib/campaigns'
 import { runForEach, useApprove, useBulkSegment, useReject, useSegments, useSources } from '@/lib/vault'
 import { awaitingAnalysis, countByStatus, filterSources, NO_FILTER, SOURCE_TYPE_LABEL, type SourceFilter } from '@/lib/vaultLogic'
 import { useCampaign } from '@/stores/campaign'
+import { ListCardSkeleton, Loading } from '@/components/ui/Skeleton'
 
 type Tab = 'sources' | 'pain'
 
@@ -89,7 +90,7 @@ export default function Vault() {
 
   const header = <PageHeader title="Knowledge Vault" subtitle="Upload, review and approve the sources your analysis is built on." actions={campaign && <AddSources campaignId={campaign.id} segments={segments.data ?? []} />} />
 
-  if (campaigns.isLoading) return <>{header}<div role="status" aria-label="Loading" className="h-64 animate-pulse rounded-card bg-card shadow-card" /></>
+  if (campaigns.isLoading) return <>{header}<Loading label="Loading"><ListCardSkeleton /></Loading></>
   if (campaigns.isError) {
     return (
       <>
@@ -123,7 +124,7 @@ export default function Vault() {
         {tab === 'pain' ? (
           <PainPoints campaignId={campaign.id} onOpenSource={setOpenId} />
         ) : sources.isLoading ? (
-          <div role="status" aria-label="Loading sources" className="h-64 animate-pulse rounded-card bg-card shadow-card" />
+          <Loading label="Loading sources"><ListCardSkeleton rows={6} /></Loading>
         ) : sources.isError ? (
           <Card className="py-14 text-center">
             <p role="alert" className="text-sm text-negative">{sources.error.message}</p>

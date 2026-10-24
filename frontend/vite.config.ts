@@ -26,5 +26,8 @@ export default defineConfig({
     globals: false,
     css: false,
     exclude: [...configDefaults.exclude, 'e2e/**'], // Playwright runs those
+    // The first test to open the Insights Studio loads the chart library, which can take several seconds when the whole
+    // suite runs in parallel; the default 5 seconds then fails a test that is only slow.
+    testTimeout: 20_000,
   },
 })

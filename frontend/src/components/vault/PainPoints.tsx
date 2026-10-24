@@ -6,13 +6,14 @@ import { ThemeInsights } from '@/components/report/ThemeEvidence'
 import { SENTIMENT } from '@/lib/report'
 import { cn } from '@/lib/cn'
 import { useThemes } from '@/lib/vault'
+import { ListCardSkeleton, Loading } from '@/components/ui/Skeleton'
 
 /** Themes found in the sources, ranked by business impact. Open one to read its pain points and the customers' own words. */
 export function PainPoints({ campaignId, onOpenSource }: { campaignId: string; onOpenSource: (id: string) => void }) {
   const { data: themes, isLoading, isError, error, refetch } = useThemes(campaignId)
   const [open, setOpen] = useState<string | null>(null)
 
-  if (isLoading) return <div role="status" aria-label="Loading themes" className="h-48 animate-pulse rounded-card bg-card shadow-card" />
+  if (isLoading) return <Loading label="Loading themes"><ListCardSkeleton rows={4} /></Loading>
   if (isError) {
     return (
       <Card className="py-10 text-center text-sm text-muted">

@@ -7,6 +7,7 @@ import { SUGGESTED_PROMPTS, type PromptChart } from '@/lib/charts'
 import { useChartFromPrompt, useOpportunityMatrix, usePresetCharts } from '@/lib/insights'
 import { ChartCard } from './ChartCard'
 import { OpportunityMatrix } from './OpportunityMatrix'
+import { ChartCardSkeleton, Loading } from '@/components/ui/Skeleton'
 
 type Made = PromptChart & { id: number; prompt: string }
 let counter = 0
@@ -89,7 +90,7 @@ export default function InsightsStudio({ campaignId }: { campaignId: string }) {
   return (
     <div className="space-y-4">
       {matrix.isLoading ? (
-        <div role="status" aria-label="Loading the matrix" className="h-96 animate-pulse rounded-card bg-card shadow-card" />
+        <Loading label="Loading the matrix"><ChartCardSkeleton className="h-96" /></Loading>
       ) : matrix.isError ? (
         <Failed message={matrix.error.message} onRetry={() => matrix.refetch()} />
       ) : matrix.data && matrix.data.points.length > 0 ? (
@@ -100,9 +101,9 @@ export default function InsightsStudio({ campaignId }: { campaignId: string }) {
 
       <h2 className="px-1 pt-2 text-base font-semibold text-ink">Dashboard</h2>
       {presets.isLoading ? (
-        <div role="status" aria-label="Loading the charts" className="grid gap-4 xl:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => <div key={i} className="h-80 animate-pulse rounded-card bg-card shadow-card" />)}
-        </div>
+        <Loading label="Loading the charts" className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => <ChartCardSkeleton key={i} />)}
+        </Loading>
       ) : presets.isError ? (
         <Failed message={presets.error.message} onRetry={() => presets.refetch()} />
       ) : (

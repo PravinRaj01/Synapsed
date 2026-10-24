@@ -11,6 +11,7 @@ import { cn } from '@/lib/cn'
 import { DEFAULT_SEGMENTS, EMPTY_SETUP, MAX_SEGMENTS, setupSchema, TIERS, type SetupValues } from '@/lib/onboarding'
 import { useCreateSetup, useWorkspaces } from '@/lib/workspaces'
 import { zodResolver } from '@/lib/zodResolver'
+import { Loading, Skeleton } from '@/components/ui/Skeleton'
 
 type Step = 'business' | 'campaign' | 'data'
 
@@ -88,7 +89,13 @@ export default function Onboarding() {
       <Card className="mx-auto max-w-2xl p-6 sm:p-8">
         <Stepper steps={steps} current={current} />
 
-        {isLoading && <div role="status" aria-label="Loading" className="h-48 animate-pulse rounded-inner bg-inner" />}
+        {isLoading && (
+          <Loading label="Loading" className="space-y-4">
+            <Skeleton className="h-11 w-full rounded-full" />
+            <Skeleton className="h-11 w-full rounded-full" />
+            <Skeleton className="h-11 w-2/3 rounded-full" />
+          </Loading>
+        )}
 
         {!isLoading && current === 'business' && (
           <section className="space-y-4" aria-label="Your business">

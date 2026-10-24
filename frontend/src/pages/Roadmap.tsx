@@ -13,16 +13,32 @@ import { useCampaigns } from '@/lib/campaigns'
 import { SORT_LABEL, sortThemes, type SortKey } from '@/lib/report'
 import { useSegments, useThemes } from '@/lib/vault'
 import { useCampaign } from '@/stores/campaign'
+import { BoardSkeleton, ChartCardSkeleton, ListCardSkeleton, Loading } from '@/components/ui/Skeleton'
 
 // The chart library is large, so the Insights Studio is only fetched when its tab is opened.
 const InsightsStudio = lazy(() => import('@/components/insights/InsightsStudio'))
+const BoardTab = lazy(() => import('@/components/board/BoardTab')) // and the drag library with it
 
-type Tab = 'report' | 'insights'
-const TABS: { value: Tab; label: string }[] = [{ value: 'report', label: 'Problem space' }, { value: 'insights', label: 'Insights Studio' }]
+/** What the studio looks like before it has arrived: a wide chart and a grid of smaller ones. */
+function StudioSkeleton() {
+  return (
+    <Loading label="Loading the studio" className="space-y-4">
+      <ChartCardSkeleton className="h-96" />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <ChartCardSkeleton />
+        <ChartCardSkeleton />
+      </div>
+    </Loading>
+  )
+}
+
+type Tab = 'report' | 'insights' | 'board'
+const TABS: { value: Tab; label: string }[] = [{ value: 'report', label: 'Problem space' }, { value: 'insights', label: 'Insights Studio' }, { value: 'board', label: 'Roadmap board' }]
 
 export default function Roadmap() {
   const [params, setParams] = useSearchParams()
-  const tab: Tab = params.get('tab') === 'insights' ? 'insights' : 'report' // the tab is in the address, so it survives a reload and can be shared
+  const asked = params.get('tab')
+  const tab: Tab = asked === 'insights' || asked === 'board' ? asked : 'report' // the tab is in the address, so it survives a reload and can be shared
   const setTab = (next: Tab) => setParams(next === 'report' ? {} : { tab: next }, { replace: true })
   const campaigns = useCampaigns()
   const { campaignId } = useCampaign()
@@ -42,14 +58,24 @@ export default function Roadmap() {
     />
   )
 
+  // The tabs are there from the start, so they do not pop in when the data arrives; the placeholder matches the tab.
+  const tabs = <SegmentedControl<Tab> label="Roadmap view" value={tab} onChange={setTab} options={TABS} className="mb-4 print:hidden" />
+
   if (campaigns.isLoading || (campaign && themes.isLoading)) {
-    return <>{header}<div role="status" aria-label="Loading the report" className="h-80 animate-pulse rounded-card bg-card shadow-card" /></>
+    return (
+      <>
+        {header}
+        {tabs}
+        {tab === 'insights' ? <StudioSkeleton /> : tab === 'board' ? <Loading label="Loading the board"><BoardSkeleton /></Loading> : <Loading label="Loading the report"><ListCardSkeleton rows={6} /></Loading>}
+      </>
+    )
   }
   const failed = campaigns.isError ? campaigns : themes.isError ? themes : null
   if (failed) {
     return (
       <>
         {header}
+        {tabs}
         <Card className="py-14 text-center">
           <p role="alert" className="text-sm text-negative">{failed.error?.message}</p>
           <Button className="mt-4" onClick={() => failed.refetch()}>Try again</Button>
@@ -61,6 +87,7 @@ export default function Roadmap() {
     return (
       <>
         {header}
+        {tabs}
         <Card className="grid place-items-center gap-3 py-16 text-center">
           <span className="grid size-12 place-items-center rounded-full bg-accent-tint text-accent"><Lightbulb className="size-6" aria-hidden /></span>
           <h2 className="text-lg font-semibold text-ink">No themes yet</h2>
@@ -96,10 +123,14 @@ export default function Roadmap() {
   return (
     <>
       {header}
-      <SegmentedControl<Tab> label="Roadmap view" value={tab} onChange={setTab} options={TABS} className="mb-4 print:hidden" />
+      {tabs}
       {tab === 'insights' ? (
-        <Suspense fallback={<div role="status" aria-label="Loading the studio" className="h-96 animate-pulse rounded-card bg-card shadow-card" />}>
+        <Suspense fallback={<StudioSkeleton />}>
           <InsightsStudio campaignId={campaign.id} />
+        </Suspense>
+      ) : tab === 'board' ? (
+        <Suspense fallback={<Loading label="Loading the board"><BoardSkeleton /></Loading>}>
+          <BoardTab campaignId={campaign.id} />
         </Suspense>
       ) : (
         report
