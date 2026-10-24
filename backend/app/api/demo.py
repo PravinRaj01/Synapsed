@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.api.common import require_campaign
 from app.core.auth import AuthUser, current_user
@@ -12,7 +13,14 @@ from app.demo import DemoError, load_demo
 router = APIRouter(prefix="/api/v1", tags=["demo"])
 
 
-@router.post("/campaigns/{campaign_id}/demo", status_code=201)
+class DemoLoadedOut(BaseModel):
+    resources: int
+    insights: int
+    themes: int
+    roadmap_items: int
+
+
+@router.post("/campaigns/{campaign_id}/demo", status_code=201, response_model=DemoLoadedOut)
 def load_demo_sandbox(campaign_id: UUID, user: AuthUser = Depends(current_user)):
     """Fill an empty campaign with invented sources, pain points, themes and a roadmap (no LLM calls).
 
