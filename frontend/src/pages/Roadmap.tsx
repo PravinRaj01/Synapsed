@@ -1,6 +1,6 @@
 import { Lightbulb } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router'
+import { lazy, Suspense, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router'
 import { ExportBar } from '@/components/report/ExportBar'
 import { SegmentHeatmap } from '@/components/report/SegmentHeatmap'
 import { ThemesTable } from '@/components/report/ThemesTable'
@@ -14,7 +14,16 @@ import { SORT_LABEL, sortThemes, type SortKey } from '@/lib/report'
 import { useSegments, useThemes } from '@/lib/vault'
 import { useCampaign } from '@/stores/campaign'
 
+// The chart library is large, so the Insights Studio is only fetched when its tab is opened.
+const InsightsStudio = lazy(() => import('@/components/insights/InsightsStudio'))
+
+type Tab = 'report' | 'insights'
+const TABS: { value: Tab; label: string }[] = [{ value: 'report', label: 'Problem space' }, { value: 'insights', label: 'Insights Studio' }]
+
 export default function Roadmap() {
+  const [params, setParams] = useSearchParams()
+  const tab: Tab = params.get('tab') === 'insights' ? 'insights' : 'report' // the tab is in the address, so it survives a reload and can be shared
+  const setTab = (next: Tab) => setParams(next === 'report' ? {} : { tab: next }, { replace: true })
   const campaigns = useCampaigns()
   const { campaignId } = useCampaign()
   const campaign = campaigns.data?.find((c) => c.id === campaignId) ?? campaigns.data?.[0]
@@ -29,7 +38,7 @@ export default function Roadmap() {
     <PageHeader
       title="Roadmap"
       subtitle="The problem space report, insights studio and a Now / Next / Later board."
-      actions={campaign && sorted.length > 0 ? <ExportBar campaign={campaign.name} themes={sorted} /> : undefined}
+      actions={campaign && sorted.length > 0 && tab === 'report' ? <ExportBar campaign={campaign.name} themes={sorted} /> : undefined}
     />
   )
 
@@ -62,9 +71,8 @@ export default function Roadmap() {
     )
   }
 
-  return (
+  const report = (
     <>
-      {header}
       <div className="mb-6 hidden print:block">
         <h2 className="text-xl font-semibold">Problem space report: {campaign.name}</h2>
         <p className="text-sm text-muted">{today.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}. Business impact is customer weight × severity, scaled so the strongest theme is 100.</p>
@@ -82,6 +90,20 @@ export default function Roadmap() {
         <ThemesTable themes={sorted} onOpenSource={setOpenSource} />
         <SegmentHeatmap themes={sorted} />
       </div>
+    </>
+  )
+
+  return (
+    <>
+      {header}
+      <SegmentedControl<Tab> label="Roadmap view" value={tab} onChange={setTab} options={TABS} className="mb-4 print:hidden" />
+      {tab === 'insights' ? (
+        <Suspense fallback={<div role="status" aria-label="Loading the studio" className="h-96 animate-pulse rounded-card bg-card shadow-card" />}>
+          <InsightsStudio campaignId={campaign.id} />
+        </Suspense>
+      ) : (
+        report
+      )}
       <SourceViewer id={openSource} segments={segments.data ?? []} onClose={() => setOpenSource(null)} />
     </>
   )
