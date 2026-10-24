@@ -115,6 +115,14 @@ class SearchHitOut(BaseModel):
     matched_by: list[Literal["meaning", "keywords"]]
 
 
+def _record(user_id, campaign_id, completion: Completion) -> None:
+    try:
+        with user_tx(user_id) as conn:
+            record_completion(conn, campaign_id, "chat", completion)
+    except Exception:
+        logger.warning("Could not record telemetry", exc_info=True)
+
+
 @router.post("/chat", response_model=ChatOut)
 def chat(req: ChatRequest, user: AuthUser = Depends(limited("chat"))):
     """Answer from the approved sources with [n] citations, or refuse when they do not support an answer."""
@@ -130,13 +138,20 @@ def chat(req: ChatRequest, user: AuthUser = Depends(limited("chat"))):
     except AllProvidersFailed as exc:
         logger.warning("Chat unavailable: %s", exc)
         raise HTTPException(502, "The answer service is unavailable right now. Try again shortly.") from exc
-    try:
-        with user_tx(user.id) as conn:
-            record_completion(conn, req.campaign_id, "chat", completion)
-    except Exception:
-        logger.warning("Could not record telemetry", exc_info=True)
-
+    _record(user.id, req.campaign_id, completion)
     result = chat_logic.parse_answer(completion.text, hits)
+    if result.reason == "ungrounded":
+        # Models tidy up garbled speech-to-text when they quote it, so the quote is not found. One more try, asking for exact copies.
+        retry = messages + [{"role": "assistant", "content": completion.text}, {"role": "user", "content": chat_logic.RETRY_NOTE}]
+        try:
+            again = call_llm(retry, question_language(req.question))
+        except AllProvidersFailed:
+            again = None
+        if again is not None:
+            _record(user.id, req.campaign_id, again)
+            second = chat_logic.parse_answer(again.text, hits)
+            if not second.refused:
+                completion, result = again, second
     return {
         **base, "model": f"{completion.provider}:{completion.model}", "tokens": completion.total_tokens,
         "answer": result.answer, "refused": result.refused, "reason": result.reason,

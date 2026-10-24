@@ -196,7 +196,8 @@ def fakes(world, monkeypatch):
         w.llm_calls.append((messages, language))
         if isinstance(state.reply, Exception):
             raise state.reply
-        return Completion(state.reply, "gemini", "flash-lite", 300, 50, 800)
+        reply = state.reply.pop(0) if isinstance(state.reply, list) else state.reply  # a list is one reply per call
+        return Completion(reply, "gemini", "flash-lite", 300, 50, 800)
 
     monkeypatch.setattr(api, "embed_query", embed)
     monkeypatch.setattr(api, "call_llm", llm)
@@ -250,6 +251,34 @@ def test_chat_answers_with_a_verified_citation(world, fakes):
     assert "Staged note" not in messages[-1]["content"] and "Other campaign" not in messages[-1]["content"]
     with database.user_tx(w.who.id) as conn:
         assert conn.execute("select count(*) as n from telemetry_logs where action_type = 'chat'").fetchone()["n"] == 1
+
+
+@needs_db
+def test_a_garbled_quote_gets_one_retry_and_the_second_answer_is_used(world, fakes):
+    w = world.world
+    fakes.vectors["Why does login fail?"] = vec(2)
+    bad = json.dumps({"answer": "SSO fails every morning.", "sources": [{"n": 1, "quote": "the SSO thing totally broke every day..."}]})  # no [n] marker and a quote that is not in the text
+    good = json.dumps({"answer": "SSO login fails every morning [1].", "sources": [{"n": 1, "quote": "SSO login fails every morning"}]})
+    fakes.reply = [bad, good]
+    body = ask(world, "Why does login fail?").json()
+    assert not body["refused"] and body["citations"][0]["verified"] and len(w.llm_calls) == 2
+    retry_messages = w.llm_calls[1][0]
+    assert retry_messages[-2] == {"role": "assistant", "content": bad} and retry_messages[-1]["content"] == cl.RETRY_NOTE
+    with database.user_tx(w.who.id) as conn:
+        assert conn.execute("select count(*) as n from telemetry_logs where action_type = 'chat'").fetchone()["n"] == 2
+
+
+@needs_db
+def test_the_retry_happens_once_and_only_for_ungrounded_quotes(world, fakes):
+    w = world.world
+    fakes.vectors["Why does login fail?"] = vec(2)
+    bad = json.dumps({"answer": "SSO fails.", "sources": [{"n": 1, "quote": "something the customer never said at all"}]})
+    fakes.reply = [bad, bad, bad]
+    body = ask(world, "Why does login fail?").json()
+    assert body["refused"] and body["reason"] == "ungrounded" and len(w.llm_calls) == 2  # not three
+    w.llm_calls.clear()
+    fakes.reply = json.dumps({"answer": None, "sources": []})
+    assert ask(world, "Why does login fail?").json()["reason"] == "not_in_sources" and len(w.llm_calls) == 1  # a plain "not in the sources" is not retried
 
 
 @needs_db
