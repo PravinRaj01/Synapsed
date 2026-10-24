@@ -15,6 +15,8 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
     { name: 'phone', use: { ...devices['Pixel 7'] } },
+    // Safari blocks third-party cookies, which is why the app reaches the auth service through its own origin.
+    { name: 'safari', use: { ...devices['Desktop Safari'] } },
   ],
   webServer: process.env.E2E_BASE_URL
     ? undefined
