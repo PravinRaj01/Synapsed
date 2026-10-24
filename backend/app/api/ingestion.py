@@ -62,12 +62,14 @@ class StoredIngestRequest(BaseModel):
     source_type: str | None = None
     text_column: str | None = None
     segment_column: str | None = None
+    segment_id: UUID | None = None  # the customer segment this source comes from
 
 
 class ResearchRequest(BaseModel):
     campaign_id: UUID
     query: str = Field(min_length=3, max_length=200)
     max_results: int = Field(5, ge=1, le=10)
+    segment_id: UUID | None = None
 
 
 class ResearchResult(BaseModel):
@@ -105,6 +107,15 @@ def _insert_resource(
     )
 
 
+def check_segment(user_id: UUID, campaign_id: UUID, segment_id: UUID | None) -> None:
+    """422 unless the segment belongs to the campaign (RLS already hides other users' segments)."""
+    if segment_id is None:
+        return
+    with user_tx(user_id) as conn:
+        if not conn.execute("select 1 from segments where id = %s and campaign_id = %s", (segment_id, campaign_id)).fetchone():
+            raise HTTPException(422, "That segment is not part of this campaign")
+
+
 def _segment_ids(conn: psycopg.Connection, campaign_id: UUID) -> dict[str, UUID]:
     rows = conn.execute("select id, name from segments where campaign_id = %s", (campaign_id,)).fetchall()
     return {r["name"].lower(): r["id"] for r in rows}
@@ -112,9 +123,12 @@ def _segment_ids(conn: psycopg.Connection, campaign_id: UUID) -> dict[str, UUID]
 
 def _stage(
     user: AuthUser, campaign_id: UUID, data: bytes, filename: str, key: str, source_type: str | None,
-    text_column: str | None, segment_column: str | None, *, already_stored: bool,
+    text_column: str | None, segment_column: str | None, *, already_stored: bool, default_segment: UUID | None = None,
 ) -> IngestResponse:
-    """Parse, scrub and stage a file's content; keep the file in storage unless nothing new came of it."""
+    """Parse, scrub and stage a file's content; keep the file in storage unless nothing new came of it.
+
+    `default_segment` tags every source from the file; a row's own value in the segment column wins over it.
+    """
     try:
         kind = parsers.detect_kind(filename)
         stype = resolve_source_type(kind, source_type)
@@ -136,7 +150,7 @@ def _stage(
     with user_tx(user.id) as conn:
         segments = _segment_ids(conn, campaign_id)
         for item, prep in prepared:
-            segment_id = segments.get(item.segment.lower()) if item.segment else None
+            segment_id = (segments.get(item.segment.lower()) if item.segment else None) or default_segment
             results.append(
                 _insert_resource(
                     conn, campaign_id=campaign_id, title=item.title, source_type=stype, prepared=prep,
@@ -156,6 +170,7 @@ def ingest(
     source_type: str | None = Form(None),
     text_column: str | None = Form(None),
     segment_column: str | None = Form(None),
+    segment_id: UUID | None = Form(None),
     user: AuthUser = Depends(limited("ingest")),
 ) -> IngestResponse:
     """Parse, scrub and stage an uploaded file. Nothing is embedded until it is approved.
@@ -164,6 +179,7 @@ def ingest(
     """
     max_bytes = get_settings().max_upload_mb * 1024 * 1024
     _require_campaign(user.id, campaign_id)
+    check_segment(user.id, campaign_id, segment_id)
 
     data = file.file.read(max_bytes + 1)
     if len(data) > max_bytes:
@@ -171,7 +187,7 @@ def ingest(
     filename = PurePath(file.filename or "upload").name
     key = f"{campaign_id}/{uuid.uuid4().hex}/{filename}"
     return _stage(user, campaign_id, data, filename, key, source_type, text_column, segment_column,
-                  already_stored=False)
+                  already_stored=False, default_segment=segment_id)
 
 
 @router.post("/uploads", response_model=UploadTicket)
@@ -198,6 +214,7 @@ def ingest_stored(req: StoredIngestRequest, user: AuthUser = Depends(limited("in
     """Stage a file the browser already uploaded to the key from /uploads."""
     max_bytes = get_settings().max_upload_mb * 1024 * 1024
     _require_campaign(user.id, req.campaign_id)
+    check_segment(user.id, req.campaign_id, req.segment_id)
     if not req.key.startswith(f"{req.campaign_id}/") or ".." in req.key:
         raise HTTPException(403, "That upload does not belong to this campaign")
     size = storage.object_size(req.key)
@@ -208,7 +225,8 @@ def ingest_stored(req: StoredIngestRequest, user: AuthUser = Depends(limited("in
         raise HTTPException(413, f"File is larger than {get_settings().max_upload_mb} MB")
     filename = PurePath(req.key).name
     return _stage(user, req.campaign_id, storage.download_bytes(req.key), filename, req.key,
-                  req.source_type, req.text_column, req.segment_column, already_stored=True)
+                  req.source_type, req.text_column, req.segment_column, already_stored=True,
+                  default_segment=req.segment_id)
 
 
 @router.get("/resources")
@@ -217,8 +235,9 @@ def list_resources(campaign_id: UUID, status: str | None = None, user: AuthUser 
         return conn.execute(
             """select r.id, r.title, r.source_type, r.source_url, r.language, r.status,
                       r.pii_redacted, r.pii_note, r.summary, r.created_at, length(r.content) as chars,
+                      r.segment_id, s.name as segment, r.analyzed_at,
                       (select count(*) from resource_chunks c where c.resource_id = r.id) as chunk_count
-               from resources r
+               from resources r left join segments s on s.id = r.segment_id
                where r.campaign_id = %s and (%s::text is null or r.status = %s)
                order by r.created_at desc limit 500""",
             (campaign_id, status, status),
@@ -273,6 +292,7 @@ def reject_resource(resource_id: UUID, user: AuthUser = Depends(current_user)):
 def research(req: ResearchRequest, user: AuthUser = Depends(limited("research"))) -> list[ResearchResult]:
     """Search the web and stage readable results. The PM approves what is worth keeping."""
     _require_campaign(user.id, req.campaign_id)
+    check_segment(user.id, req.campaign_id, req.segment_id)
     try:
         hits = web.search_web(req.query, req.max_results)
     except Exception as exc:
@@ -294,7 +314,7 @@ def research(req: ResearchRequest, user: AuthUser = Depends(limited("research"))
                 continue
             resource = _insert_resource(
                 conn, campaign_id=req.campaign_id, title=page.title, source_type="web_scrape",
-                prepared=prep, source_url=page.url, summary=web.summarize(prep.text),
+                prepared=prep, source_url=page.url, summary=web.summarize(prep.text), segment_id=req.segment_id,
             )
             results.append(ResearchResult(url=page.url, title=page.title, resource=resource))
     return results
