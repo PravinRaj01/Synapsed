@@ -22,6 +22,7 @@ from ai_pipeline.analysis.state import Deps
 from app.api.common import require_campaign
 from app.core.auth import AuthUser, current_user
 from app.core.config import get_settings
+from app.core.rate_limit import limited
 from app.core.database import user_tx
 
 logger = logging.getLogger("synapsed.runs")
@@ -107,7 +108,7 @@ def summarize(state: dict, remaining: int) -> dict:
 
 
 @router.post("/analyze")
-def analyze(req: AnalyzeRequest, user: AuthUser = Depends(current_user)) -> StreamingResponse:
+def analyze(req: AnalyzeRequest, user: AuthUser = Depends(limited("analyze"))) -> StreamingResponse:
     """Analyse one batch of the campaign's approved resources and stream the run as it happens.
 
     Events: `run` (the run id), `trace` (one per graph step, model call or agent tool call),

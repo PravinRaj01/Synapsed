@@ -16,6 +16,7 @@ from ai_pipeline.telemetry import record_completion
 from app.api.common import require_campaign
 from app.core.auth import AuthUser, current_user
 from app.core.database import user_tx
+from app.core.rate_limit import limited
 from app.core.language import detect_language
 
 logger = logging.getLogger("synapsed.chat")
@@ -71,7 +72,7 @@ def _describe(n: int, hit: Hit) -> dict:
 
 
 @router.post("/chat")
-def chat(req: ChatRequest, user: AuthUser = Depends(current_user)):
+def chat(req: ChatRequest, user: AuthUser = Depends(limited("chat"))):
     """Answer from the approved sources with [n] citations, or refuse when they do not support an answer."""
     require_campaign(user.id, req.campaign_id)
     hits = _retrieve(user.id, req.campaign_id, req.question, req.source_ids, CONTEXT_CHUNKS)
@@ -103,7 +104,7 @@ def chat(req: ChatRequest, user: AuthUser = Depends(current_user)):
 @router.get("/search")
 def search(
     campaign_id: UUID, q: str = Query(min_length=2, max_length=300), limit: int = Query(10, ge=1, le=20),
-    source_ids: list[UUID] | None = Query(None, max_length=50), user: AuthUser = Depends(current_user),
+    source_ids: list[UUID] | None = Query(None, max_length=50), user: AuthUser = Depends(limited("search")),
 ):
     """Hybrid search over approved sources: passages that match by meaning or by exact words."""
     require_campaign(user.id, campaign_id)
