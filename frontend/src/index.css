@@ -29,6 +29,15 @@
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.05);
   --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.05), 0 16px 36px rgb(0 0 0 / 0.1);
+
+  /* Chart colours in a fixed order, emerald first. Checked for colour-blind separation on the card surface. Where the
+     light steps are pale (yellow, pink) every chart also writes its labels and offers a table. */
+  --series-1: #059669;
+  --series-2: #2a78d6;
+  --series-3: #eb6834;
+  --series-4: #6250d6;
+  --series-5: #eda100;
+  --series-6: #e87ba4;
 }
 
 [data-theme='dark'] {
@@ -47,6 +56,13 @@
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
   --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.5), 0 16px 36px rgb(0 0 0 / 0.5);
+
+  --series-1: #12a574;
+  --series-2: #3987e5;
+  --series-3: #d95926;
+  --series-4: #9085e9;
+  --series-5: #c98500;
+  --series-6: #d55181;
 }
 
 @theme inline {
