@@ -1,4 +1,4 @@
-import { Lightbulb, Sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/Card'
@@ -10,15 +10,6 @@ function Soon({ icon, title, children }: { icon: ReactNode; title: string; child
       <h2 className="text-lg font-semibold">{title}</h2>
       <p className="max-w-md text-sm text-muted">{children}</p>
     </Card>
-  )
-}
-
-export function RoadmapStub() {
-  return (
-    <>
-      <PageHeader title="Roadmap" subtitle="The problem space report, insights studio and a Now / Next / Later board." />
-      <Soon icon={<Lightbulb className="size-6" />} title="Coming soon">Themes by business impact, charts, PRDs and the roadmap board.</Soon>
-    </>
   )
 }
 

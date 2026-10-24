@@ -127,3 +127,21 @@
   box-shadow: inset 0 -3px 0 var(--accent-from);
   animation: focus-flash 1.6s ease-out;
 }
+
+/* Printing the report: no navigation, a white page, and nothing cut off by a scroll box. */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000;
+  }
+  main {
+    padding: 0 !important;
+  }
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+  * {
+    box-shadow: none !important;
+  }
+}

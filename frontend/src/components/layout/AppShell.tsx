@@ -14,7 +14,7 @@ export function AppShell() {
   const signOut = useSignOut()
   return (
     <div className="min-h-dvh bg-canvas">
-      <header className="sticky top-0 z-40 border-b border-line/60 bg-canvas/85 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-line/60 bg-canvas/85 backdrop-blur print:hidden">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
           <Logo />
           <div className="order-last w-full sm:order-none sm:w-auto sm:flex-1 sm:flex sm:justify-center">
@@ -28,7 +28,7 @@ export function AppShell() {
       </header>
 
       <div className="mx-auto flex max-w-[1600px]">
-        <aside className="sticky top-[73px] hidden h-[calc(100dvh-73px)] w-[72px] shrink-0 flex-col items-center justify-between py-6 lg:flex" aria-label="Quick actions">
+        <aside className="sticky top-[73px] hidden h-[calc(100dvh-73px)] w-[72px] shrink-0 flex-col items-center justify-between py-6 lg:flex print:hidden" aria-label="Quick actions">
           <ThemeToggle />
           <button
             type="button"
