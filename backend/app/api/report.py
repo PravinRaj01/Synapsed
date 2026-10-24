@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/v1", tags=["report"])
 TOP_USE_CASES = 5
 TOP_THEMES = 5
 RECENT = 5
+TREND_DAYS = 7
 MAX_THEME_INSIGHTS = 200
 
 
@@ -215,6 +216,14 @@ def overview(campaign_id: UUID, user: AuthUser = Depends(current_user)):
                       (select count(*) from themes where campaign_id = %(c)s) as themes,
                       (select count(*) from roadmap_items where campaign_id = %(c)s) as roadmap_items,
                       (select count(*) from segments where campaign_id = %(c)s) as segments""", {"c": campaign_id}).fetchone()
+        trend = conn.execute(
+            """select table_name, count(*) filter (where created_at >= now() - make_interval(days => %(d)s)) as current,
+                      count(*) filter (where created_at < now() - make_interval(days => %(d)s)
+                                         and created_at >= now() - make_interval(days => 2 * %(d)s)) as previous
+               from (select 'resources' as table_name, created_at from resources where campaign_id = %(c)s
+                     union all select 'insights', created_at from insights where campaign_id = %(c)s
+                     union all select 'themes', created_at from themes where campaign_id = %(c)s) t
+               group by table_name""", {"c": campaign_id, "d": TREND_DAYS}).fetchall()
         recent = conn.execute(
             "select id, title, source_type, status, language, created_at from resources where campaign_id = %s "
             "order by created_at desc limit %s", (campaign_id, RECENT)).fetchall()
@@ -234,6 +243,9 @@ def overview(campaign_id: UUID, user: AuthUser = Depends(current_user)):
                       "waiting_for_analysis": waiting},
         **totals,
         "sentiment": {s: sentiment.get(s, 0) for s in ("positive", "neutral", "negative")},
+        # How many were added in the last TREND_DAYS days against the TREND_DAYS before, so KPI cards can show % change.
+        "trend": {"days": TREND_DAYS, **{name: {"current": 0, "previous": 0} for name in ("resources", "insights", "themes")},
+                  **{t["table_name"]: {"current": t["current"], "previous": t["previous"]} for t in trend}},
         "top_themes": top_themes,
         "recent_resources": recent,
         "last_run": None if last_run is None else {
